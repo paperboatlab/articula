@@ -43,7 +43,7 @@ paperboat app open articula ~/models        # or: bin/articula ~/models
 paperboat package add omc Modelica --project ~/models   # the Modelica Standard Library, once per folder
 ```
 
-Opens at `http://127.0.0.1:59240/`. omc needs `paperboatd` (the `paperboat-cli` package, or
+Opens at `http://127.0.0.1:30472/`. omc needs `paperboatd` (the `paperboat-cli` package, or
 `PAPERBOATD=/path/to/paperboatd`) and podman or docker.
 
 ## Check

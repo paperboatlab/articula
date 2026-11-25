@@ -32,7 +32,7 @@ void print_help(std::string_view prog) {
             << "packages: paperboat package add omc Modelica --project <folder>\n\n"
             << "  " << prog << " --help | --version\n"
             << "Server options:\n"
-            << "  --port <N>       Listen port (default: first free of 59240..59259)\n"
+            << "  --port <N>       Listen port (default: 30472, else first free of 30500..30599)\n"
             << "  --app <dir>      Directory of built web app (default: ./dist)\n"
             << "  --version <V>    Target version tag\n\n"
             << "Generate options:\n"
@@ -144,7 +144,7 @@ fs::path find_app_dir(const fs::path& explicit_app, const fs::path& exe_dir) {
 }
 
 int cmd_server(const std::vector<std::string_view>& args, const fs::path& exe_dir) {
-  int port = 0;  // 0: first free of 59240..59259
+  int port = 0;  // 0: 30472, else first free of 30500..30599
   fs::path app;
   fs::path file;
   for (std::size_t i = 0; i < args.size(); ++i) {

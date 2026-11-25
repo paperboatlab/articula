@@ -1538,7 +1538,7 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
              : fmu            ? "FMU: " + *spec.ode_blocker
                               : "ODE: no events, no torn systems, no external functions";
 
-  constexpr int port = 8780;
+  constexpr int port = 51311;  // Simplicial stations: 51301 up, the tutorials hold 51301..51310
   progress("generate", 0.5);
   if (!o.dry) fs::create_directories(r.out);
   std::string domain;

@@ -83,7 +83,7 @@ std::filesystem::path default_workspace();
 // Creates `dir`; the model itself is created by `open` when it doesn't exist.
 std::filesystem::path default_file(const std::filesystem::path& dir = default_workspace());
 
-// Serves until killed. Returns 1 when the port can't be taken. port 0 = first free of 59240..59259. `file` is the .mo to open
+// Serves until killed. Returns 1 when the port can't be taken. port 0 = 30472, else first free of 30500..30599. `file` is the .mo to open
 // (created as a stub model when it doesn't exist); empty = default_file().
 int serve_articula(int port, const std::filesystem::path& app = {}, Omc::Options options = {},
                  const std::filesystem::path& file = {});

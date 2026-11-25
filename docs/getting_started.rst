@@ -7,7 +7,7 @@ runtime too.
 .. code-block:: sh
 
    paperboat app install articula
-   paperboat app open articula [<folder>]      # http://127.0.0.1:59240
+   paperboat app open articula [<folder>]      # http://127.0.0.1:30472
    paperboat app stop articula
 
 The Modelica Standard Library is one of the workspace's packages, installed once per folder:

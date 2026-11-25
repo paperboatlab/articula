@@ -1743,11 +1743,12 @@ int serve_articula(int port, const fs::path& app, Omc::Options options, const fs
   sigaction(SIGINT, &sa, nullptr);
 #endif
   Omc omc(std::move(options));
-  // port 0: the first free one of 59240..59259 (apps.toml gives Articula 59240)
-  for (int p = 59240; port == 0 && p <= 59259; ++p)
+  // port 0: Articula's home port 30472, else the first free one of 30500..30599 (further folders)
+  if (port == 0 && !listening(30472)) port = 30472;
+  for (int p = 30500; port == 0 && p <= 30599; ++p)
     if (!listening(p)) port = p;
   if (port == 0) {
-    std::cerr << "no free port in 59240..59259\n";
+    std::cerr << "no free port: 30472 and 30500..30599 are taken\n";
     return 1;
   }
   ix::HttpServer server(port, "127.0.0.1");

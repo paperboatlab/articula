@@ -50,7 +50,7 @@ type Stage = "diagram" | "icon" | "3d" | "text";
 function serverUrl(): string {
   const given = new URLSearchParams(location.search).get("server");
   if (given) return given;
-  return !location.host ? "ws://localhost:59240" : `ws://${location.host}`;
+  return !location.host ? "ws://localhost:30472" : `ws://${location.host}`;
 }
 
 type Side = "l" | "r" | "b";

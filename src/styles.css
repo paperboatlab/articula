@@ -61,29 +61,10 @@ body { background: var(--surface-ground); color: var(--text); font: 13px/1.45 va
 .pfoot { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--text-muted); }
 .pfoot .key { margin-left: auto; }
 
-/* dialogs: a labelled well, About */
+/* dialogs: a labelled well */
 .well.ask { display: flex; flex-direction: column-reverse; gap: 4px; padding: 8px 10px; }
 .well.ask input { all: unset; font: 13px var(--font-sans); color: var(--text); }
 .well.ask em { font: normal 11px var(--font-sans); color: var(--text-muted); }
-/* About (ui-example §10) */
-.about-win { gap: 14px; }
-.abtop { display: flex; gap: 20px; align-items: center; }
-.abname { display: flex; flex-direction: column; gap: 6px; }
-.wm.big { font: 400 28px var(--font-display); letter-spacing: -0.01em; line-height: 1; white-space: nowrap; }
-.wm.big b { font-weight: 600; } .wm .um { color: var(--text-muted); }
-.abname > small { font-size: 12.5px; color: var(--text-muted); }
-.abver { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: 13px; }
-.abver span { color: var(--text-muted); }
-.abver code { flex-basis: 100%; font: 11.5px var(--font-mono); color: var(--text-muted); }
-.abkeys { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
-.abmade { font-size: 12.5px; color: var(--text-muted); padding: 10px 12px; background: var(--surface-sunken); border-radius: var(--radius-md); }
-.abmade b { color: var(--text); font-weight: 500; }
-.abmade a, .abtab a { color: var(--accent-text); text-decoration: none; }
-.abg { font: 500 10.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); padding: 10px 0 4px; }
-.abtab { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-.abtab td { padding: 5px 8px; border-bottom: 1px solid var(--line); }
-.abtab .mu { color: var(--text-muted); } .abtab code { font: 11px var(--font-mono); white-space: nowrap; }
-.abfoot { font-size: 11.5px; color: var(--text-muted); }
 .lib-quick-list { display: grid; gap: 4px; margin-bottom: 12px; }
 .lib-quick-item { all: unset; display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; border-radius: var(--radius-md); cursor: pointer; }
 .lib-quick-item:hover { background: var(--surface-sunken); }

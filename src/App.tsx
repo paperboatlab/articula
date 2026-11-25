@@ -5,7 +5,7 @@
 // interface sheet on Alt V, the export dock under the stage.
 
 import { ReactFlowProvider } from "@xyflow/react";
-import { AppMark, Key, MenuBar, Notifications, Panel, PanelsKey, Search, Segmented, Split as Gutter, ThemePicker, Toasts, readStored, useToasts, writeStored, type PaneRect, type SearchItem } from "@paperboatlab/ui";
+import { About, AppMark, Key, MenuBar, Notifications, Panel, PanelsKey, Search, Segmented, Split as Gutter, ThemePicker, Toasts, readStored, useToasts, writeStored, type PaneRect, type SearchItem } from "@paperboatlab/ui";
 import { HelpWindow } from "@paperboatlab/ui";
 import { afterClose, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
 import { helpCommand, SEARCH_CHORD, useShortcuts, type Command } from "@paperboatlab/ui";
@@ -20,14 +20,14 @@ import { PackageWindow } from "@paperboatlab/ui/packages";
 import { Packages } from "./library/Packages.tsx";
 import { StudioContext, type StudioModel } from "./model/types.ts";
 import { OmcClient, type OmcStatus } from "./omc/omc.ts";
-import { type Log, type Message } from "@paperboatlab/ui";
+import { type Credit, type Log, type Message } from "@paperboatlab/ui";
 import { ComponentPopover } from "./popover/index.tsx";
 import { InterfaceSheet } from "./sheet/index.tsx";
 import { IconView } from "./icon/IconView.tsx";
-import { AboutModal } from "./shell/AboutModal.tsx";
 import { ConfirmModal, LibraryModal, PromptModal } from "./shell/Dialogs.tsx";
 import { OmcKey } from "./shell/OmcKey.tsx";
 import { MENUS } from "./shell/menus.ts";
+import { STUDIO_VERSION } from "./version.ts";
 import { THEMES, useTheme } from "@paperboatlab/ui";
 import { Opening } from "./shell/Opening.tsx";
 import { Simulate } from "./simulate/Simulate.tsx";
@@ -93,6 +93,13 @@ type ConfirmSpec = {
   onConfirm: () => void | Promise<void>;
 };
 
+// About's "Built on": Articula's own; the kit's (React, @xyflow/react, CodeMirror, uPlot, ...) follow.
+const CREDITS: Credit[] = [
+  ["OpenModelica (omc)", "compiles and simulates models", "OSMC-PL / GPL-3.0", "https://openmodelica.org"],
+  ["Modelica Standard Library", "component models", "BSD-3-Clause", "https://github.com/modelica/ModelicaStandardLibrary"],
+  ["three.js", "the 3D view", "MIT", "https://threejs.org"],
+];
+
 function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   // The user's squero.toml (editor settings and themes, shared with MX), through the server's config ops.
   const config = useMemo<ConfigStore>(() => ({
@@ -139,6 +146,14 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [packagesOpen, setPackagesOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  // About's Paperboat: undefined while the server is asked, null when it isn't installed.
+  const [paperboat, setPaperboat] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!aboutOpen) return;
+    let live = true;
+    omc.op<{ paperboat?: string | null }>("about").then((r) => live && setPaperboat(r.paperboat ?? null), () => live && setPaperboat(null));
+    return () => { live = false; };
+  }, [omc, aboutOpen]);
   const [helpQuery, setHelpQuery] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false); // the command search (Ctrl+K)
   const [logs, setLogs] = useState<Log[]>([]);
@@ -941,7 +956,9 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           </PackageWindow>
         )}
 
-        {aboutOpen && <AboutModal omc={omc} status={status} onClose={() => setAboutOpen(false)} />}
+        {aboutOpen && <About app="articula" role="Acausal physical modelling on OpenModelica" version={STUDIO_VERSION}
+          paperboat={paperboat} info={`omc ${/\d+\.\d+\.\d+/.exec(status.version)?.[0] ?? "…"} · protocol articula/0`}
+          repo="paperboatlab/articula" credits={CREDITS} onClose={() => setAboutOpen(false)} />}
         {helpQuery !== null && <HelpWindow app="Articula" provider={helpProvider} commands={commands} query={helpQuery} onClose={() => setHelpQuery(null)} />}
 
         <Toasts toasts={notes.toasts} onDismiss={notes.dismiss} />

@@ -515,6 +515,11 @@ TEST_CASE("set_icon round-trips the Wave 2 icon goldens through omc", "[articula
     CHECK(back.value("h", 1) == golden.value("h", 1));
     CHECK(op(omc, {{"id", 3}, {"op", "save"}, {"model", model}})["ok"] == true);
     CHECK_THAT(read_text(file), Catch::Matchers::ContainsSubstring("Icon("));
+    // Save as writes the new file (omc's save() only writes the class's own)
+    const fs::path copy = file.parent_path() / "articula-save-as" / (model + ".mo");
+    CHECK(op(omc, {{"id", 4}, {"op", "save"}, {"model", model}, {"file", copy.string()}})["ok"] == true);
+    CHECK_THAT(read_text(copy), Catch::Matchers::ContainsSubstring("Icon("));
+    fs::remove_all(copy.parent_path());
     fs::remove(file);
   }
 }

@@ -35,7 +35,8 @@ flowchart LR
   the network for library downloads). Also the allow-list (`allowed`) and omc's value parser.
 - `server/src/server.cpp`, `include/articula/server.hpp`: the HTTP/WebSocket server (ixwebsocket) and
   every `articula/0` op (open, workspace, class files, save, check, icon, set_icon, simulate, cancel,
-  packages, generate/export); `workspace_of` picks the lease's project (a folder, or the folder holding
+  packages, generate/export, and the hubs: `hubs` from `paperboat hub list --json`, `hub_files`, `hub_new`,
+  `open_window` for a model outside the workspace, through `paperboat app open`); `workspace_of` picks the lease's project (a folder, or the folder holding
   a file's top package).
 - `server/src/icon.cpp`, `connectors.cpp`, `seticon.cpp`: the importer (`Icon(graphics)` → the kit's
   `IconDef`, connectors and their domains) and its inverse; `generate.cpp`: the station generator
@@ -56,3 +57,4 @@ flowchart LR
 - omc sees only the workspace (writable: it saves `.mo` files), its work folder and the package volume.
 - An expression from the page passes `allowed()` (one allow-listed call; no `system`, no `runScript`).
 - The page never talks to omc or the daemon itself.
+- Hubs are Malachite's: Articula reads them only through `paperboat hub list --json`; no Malachite, no hubs.

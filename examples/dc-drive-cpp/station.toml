@@ -5,7 +5,7 @@ version = "0.1.0"
 engine = ">=0.1"
 language = "cpp"
 run = "build/paperboat-dc-drive"
-port = 8780
+port = 51311
 descriptor = "descriptor.toml"
 
 [test]

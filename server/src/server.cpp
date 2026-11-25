@@ -724,11 +724,20 @@ json op_move_class(const json& in) {
 
 json op_save(Omc& omc, const json& in) {
   const std::string model = user_model(in);
+  const std::string source = text_of(omc.call("getSourceFile(" + model + ")"));
   std::string file = in.value("file", "");
-  if (file.empty()) file = text_of(omc.call("getSourceFile(" + model + ")"));
+  if (file.empty()) file = source;
   if (file.empty()) throw std::runtime_error(model + " has no file to save to");
   if (in.contains("content") && in["content"].is_string()) {
     std::ofstream(file) << in["content"].get<std::string>();
+  } else if (fs::absolute(file) != fs::absolute(source)) {
+    // Save as: omc's save() only writes the class's own file, so the server writes the new one
+    // (it may be outside the workspace omc sees: a hub's folder).
+    const std::string listed = text_of(omc.call("list(" + model + ")"));
+    if (listed.empty()) throw std::runtime_error("cannot save " + model + ": " + omc.errors());
+    fs::create_directories(fs::absolute(file).parent_path());
+    std::ofstream out(file);
+    if (!(out << listed << "\n")) throw std::runtime_error("cannot write " + file);
   } else {
     if (omc.call("save(" + model + ")") != "true") {
       const std::string listed = text_of(omc.call("list(" + model + ")"));
@@ -1595,6 +1604,113 @@ nlohmann::json visual_shapes(const std::string& xml, const std::function<json(co
   return shapes;
 }
 
+// ── Hubs (paperboat#16): Malachite's, read through `paperboat hub list --json` (no Malachite, no hub).
+// Articula opens files one by one, so the file decides the hub: Open and Save as pick from a hub's tree.
+
+// The .mo files under `root` and the folders that hold them, in tree order; dot-folders (.malachite, .git) never.
+json hub_tree(const fs::path& root, std::size_t* count = nullptr) {
+  const std::set<std::string> skip = {"build", "dist", "node_modules", "__pycache__"};
+  json entries = json::array();
+  std::size_t mo = 0;
+  std::function<void(const fs::path&, int)> walk = [&](const fs::path& dir, int depth) {
+    // ponytail: depth 8, 5000 rows; a bigger hub is cut off, read lazily per folder if that bites
+    if (depth > 8 || entries.size() >= 5000) return;
+    std::vector<fs::path> dirs, files;
+    std::error_code ec;
+    for (const auto& e : fs::directory_iterator(dir, fs::directory_options::skip_permission_denied, ec)) {
+      const std::string name = e.path().filename().string();
+      if (name.empty() || name[0] == '.' || skip.contains(name)) continue;
+      (e.is_directory(ec) ? dirs : files).push_back(e.path());
+    }
+    std::sort(dirs.begin(), dirs.end());
+    std::sort(files.begin(), files.end());
+    for (const fs::path& d : dirs) {
+      entries.push_back({{"name", d.filename().string()}, {"path", fs::relative(d, root).generic_string()}, {"kind", "folder"}, {"depth", depth}});
+      walk(d, depth + 1);
+    }
+    for (const fs::path& f : files) {
+      if (f.extension() == ".mo" && f.filename() != "package.mo") ++mo;
+      entries.push_back({{"name", f.filename().string()}, {"path", fs::relative(f, root).generic_string()}, {"kind", "file"}, {"depth", depth}});
+    }
+  };
+  walk(root, 0);
+  if (count) *count = mo;
+  return entries;
+}
+
+// The hubs this machine knows, each with how many models it holds; [] without paperboat or Malachite.
+json op_hubs() {
+  json list;
+  try {
+    list = json::parse(paperboat_output("hub list --json"));
+  } catch (const json::exception&) {
+    return json::array();
+  }
+  if (!list.is_array()) return json::array();
+  json out = json::array();
+  for (const json& h : list) {
+    if (!h.is_object() || !h.contains("id") || !h.contains("path")) continue;
+    const fs::path root = h.value("path", "");
+    const bool missing = h.value("missing", false) || !fs::is_directory(root);
+    std::size_t models = 0;
+    if (!missing) hub_tree(root, &models);
+    out.push_back({{"id", h["id"]},
+                   {"name", h.value("name", root.filename().string())},
+                   {"place", h.value("place", "local")},
+                   {"path", h.value("shown", root.string())},
+                   {"root", root.string()},
+                   {"missing", missing},
+                   {"conflicts", h.contains("conflicts") && h["conflicts"].is_array() ? h["conflicts"].size() : 0},
+                   {"holds", models == 1 ? "1 model" : std::to_string(models) + " models"}});
+  }
+  return out;
+}
+
+json op_hub_files(const json& in) {
+  const fs::path root = in.value("root", "");
+  if (root.empty() || !fs::is_directory(root)) throw std::runtime_error("no folder " + root.string());
+  return hub_tree(root);
+}
+
+// New hub… : `paperboat hub new <name>` makes it in the default folder (Malachite's); the list again.
+json op_hub_new(const json& in) {
+  const std::string name = in.value("name", "");
+  if (name.empty() || name.size() > 64 || name[0] == '-' || name.find_first_of("/\\") != std::string::npos)
+    throw std::runtime_error("a hub's name is a few words, no / or \\");
+  const fs::path log = fs::temp_directory_path() / "articula-hub-new.log";
+  if (run_paperboat({"hub", "new", name}, log) != 0) {
+    std::ifstream f(log);
+    std::string why((std::istreambuf_iterator<char>(f)), {});
+    throw std::runtime_error(why.empty() ? "paperboat hub new failed" : why);
+  }
+  return op_hubs();
+}
+
+// `paperboat app open <app> <path>`, left running (it starts the app if needed and opens its window).
+void open_app(const std::string& app, const std::string& path) {
+  const fs::path log = fs::temp_directory_path() / ("articula-open-" + app + ".log");
+  std::thread([app, path, log] { run_paperboat({"app", "open", app, path}, log); }).detach();
+}
+
+// Open <hub> in Malachite.
+json op_hub_open_malachite(const json& in) {
+  const std::string root = in.value("root", "");
+  if (root.empty() || !fs::is_directory(root)) throw std::runtime_error("no folder " + root);
+  open_app("malachite", root);
+  return json::object();
+}
+
+// A model picked from a hub: here when it is in this window's workspace (omc sees only that folder),
+// else in a new Articula window on its own workspace. {here: bool}.
+json op_open_window(const json& in, const Session& session) {
+  const fs::path file = fs::absolute(in.value("file", ""));
+  if (!fs::is_regular_file(file)) throw std::runtime_error("no file " + file.string());
+  const fs::path rel = fs::relative(file, workspace_of(fs::absolute(session.file)));
+  if (!rel.empty() && *rel.begin() != "..") return {{"here", true}};
+  open_app("articula", file.string());
+  return {{"here", false}};
+}
+
 std::string handle(Omc& omc, const std::string& message, const Session& session) {
   json in;
   try {
@@ -1641,6 +1757,16 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
     } else if (op == "about") {
       const std::string version = paperboat_version();
       out["result"] = json{{"paperboat", version.empty() ? json(nullptr) : json(version)}};
+    } else if (op == "hubs") {
+      out["result"] = op_hubs();
+    } else if (op == "hub_files") {
+      out["result"] = op_hub_files(in);
+    } else if (op == "hub_new") {
+      out["result"] = op_hub_new(in);
+    } else if (op == "hub_open_malachite") {
+      out["result"] = op_hub_open_malachite(in);
+    } else if (op == "open_window") {
+      out["result"] = op_open_window(in, session);
     } else if (op == "create_class") {
       out["result"] = op_create_class(in);
     } else if (op == "new_package") {
@@ -1677,7 +1803,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in, session);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; articula/0 has omc, open, workspace, config, config_write, about, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
+      out["error"] = "unknown op; articula/0 has omc, open, workspace, config, config_write, about, hubs, hub_files, hub_new, hub_open_malachite, open_window, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
       return out.dump();
     }
     out["ok"] = true;

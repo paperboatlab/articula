@@ -10,7 +10,9 @@ import { HelpWindow } from "@paperboatlab/ui";
 import { afterClose, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
 import { helpCommand, SEARCH_CHORD, useShortcuts, type Command } from "@paperboatlab/ui";
 import { omHelp } from "./shell/help.ts";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { HubSelector, OpenFile, SaveFile, type Hub } from "@paperboatlab/ui/hub";
+import type { FileEntry } from "@paperboatlab/ui/files";
 import { useAppConfig as useSqueroConfig, type ConfigStore } from "@paperboatlab/ui/editor";
 import { Canvas } from "./canvas/Canvas.tsx";
 import { runStationExport } from "./dock/dock.ts";
@@ -85,6 +87,9 @@ type PromptSpec = {
   confirmLabel?: string;
   onConfirm: (val: string) => void | Promise<void>;
 };
+
+/** A hub as the server lists it (`paperboat hub list --json`): the kit's Hub and its folder on this computer. */
+type AppHub = Hub & { root: string };
 
 type ConfirmSpec = {
   title: string;
@@ -195,9 +200,42 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     if (status.state === "ready") s.up = true;
   }, [status.state, show]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The hubs (paperboat#16), read on start and whenever the picker opens; none without Malachite. The file
+  // decides the hub: a model opened from inside one puts Articula there, and the bar shows its selector.
+  const [hubs, setHubs] = useState<AppHub[]>([]);
+  const [picker, setPicker] = useState<"open" | "save" | null>(null);
+  const readHubs = useCallback(() => omc.op<AppHub[]>("hubs").then((h) => setHubs(h ?? []), () => setHubs([])), [omc]);
+  useEffect(() => void readHubs(), [readHubs]);
+  const hubFiles = useCallback((h: Hub) => omc.op<FileEntry[]>("hub_files", { root: (h as AppHub).root }), [omc]);
   const classes = useClassIndex(omc);
 
   const model = api?.model;
+  const modelFile = model?.file ?? "";
+  const hub = modelFile ? hubs.find((h) => !h.missing && modelFile.startsWith(`${h.root}/`)) : undefined;
+  /** File › Open…: the kit's picker when there are hubs, else the system's straight away. */
+  const openPicker = () => (hubs.length ? (setPicker("open"), void readHubs()) : fileInputRef.current?.click());
+  const savePrompt = () =>
+    setPromptModal({
+      title: "Save Model As",
+      label: "File Path",
+      value: model?.file ?? `${model?.name}.mo`,
+      confirmLabel: "Save",
+      onConfirm: (path) => actions.saveAs(path).catch((e) => fail(e, "Couldn't save")),
+    });
+  /** A model from a hub opens here when omc can see it (this window's workspace), else in a new Articula window. */
+  const openFromHub = (file: string) =>
+    omc.op<{ here: boolean }>("open_window", { file }).then(
+      (r) => (r.here ? openDocument(file) : void show({ title: "Opening in a new Articula window", detail: file.slice(file.lastIndexOf("/") + 1), state: "done" })),
+      (e) => fail(e, "Couldn't open the model"),
+    );
+  const newHub = () =>
+    setPromptModal({
+      title: "New hub",
+      label: "Name",
+      placeholder: "e.g. tank-lab",
+      confirmLabel: "Make",
+      onConfirm: (name) => omc.op<AppHub[]>("hub_new", { name }).then((h) => setHubs(h ?? []), (e) => fail(e, "Couldn't make the hub")),
+    });
   const currentEntry = workspace?.entries.find((entry) => entry.path === model?.file);
   const canExport = currentEntry ? currentEntry.classKind === "model" || currentEntry.classKind === "block" : false;
   const classKind = currentEntry?.classKind;
@@ -639,12 +677,12 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       },
       {
         id: "file.open",
-        label: "Open / Import .mo…",
+        label: "Open…",
         menu: "file",
         group: "model",
         shortcut: "Ctrl+O",
         chord: { key: "o", ctrl: true },
-        run: () => fileInputRef.current?.click(),
+        run: openPicker,
       },
       {
         id: "file.open-path",
@@ -678,14 +716,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         shortcut: "Ctrl+Shift+S",
         chord: { key: "s", ctrl: true, shift: true },
         enabled: Boolean(model),
-        run: () =>
-          setPromptModal({
-            title: "Save Model As",
-            label: "File Path",
-            value: model?.file ?? `${model?.name}.mo`,
-            confirmLabel: "Save",
-            onConfirm: (path) => actions.saveAs(path).catch((e) => fail(e, "Couldn't save")),
-          }),
+        run: () => (hubs.length ? (setPicker("save"), void readHubs()) : savePrompt()),
       },
       {
         id: "file.load-library",
@@ -762,7 +793,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       { ...helpCommand(() => setHelpQuery(helpContext())), menu: "help" },
       { id: "about", label: "About Articula", menu: "help", group: "about", run: () => setAboutOpen(true) },
     ],
-    [actions.canUndo, running, hidden, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, railHidden, view, stageView, stageOptions, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole, saveCurrent, exportReady, exportWhy],
+    [actions.canUndo, running, hidden, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, railHidden, view, stageView, stageOptions, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole, saveCurrent, exportReady, exportWhy, hubs],
   );
   useShortcuts(commands);
   const helpProvider = useMemo(() => omHelp(omc), [omc]);
@@ -780,7 +811,11 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           <AppMark app="articula" size={26} idle={!live} label="Articula" />
           <span className="wm">Articula</span>
           <MenuBar commands={commands} menus={MENUS} />
-          {model && <span className="well proj" title={model.file}>{model.name}{fileDirty && <i className="dot" title="Not saved" />}</span>}
+          {model && hub && (
+            <HubSelector hub={hub} hubs={hubs} app="Articula" onSwitch={() => setPicker("open")} onNew={newHub}
+              onOpenInMalachite={() => void omc.op("hub_open_malachite", { root: hub.root }).catch((e) => fail(e, "Couldn't open Malachite"))} />
+          )}
+          {model && <span className="well proj" title={model.file}>{hub ? modelFile.slice(hub.root.length + 1) : model.name}{fileDirty && <i className="dot" title="Not saved" />}</span>}
           <span className="bend">
             {model && <Key size="sm" kind="quiet" icon="check" disabled={checking} onClick={() => void runCheck()} title="Check the model (Ctrl Shift C)">{checking ? "Checking…" : "Check"}</Key>}
             {running
@@ -830,7 +865,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                     dirty={actions.dirty || textDirty}
                     onSelect={(doc) => void openDocument(doc.file)}
                     onClose={(doc) => void closeDocument(doc)}
-                    onOpen={() => fileInputRef.current?.click()}
+                    onOpen={openPicker}
                   />
                   <Segmented<Stage> label="View" value={stageView} onChange={setStageView} options={stageOptions} />
                 </div>
@@ -925,6 +960,15 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           />
         )}
 
+        {picker === "open" && (
+          <OpenFile what="a model" types={["mo"]} hubs={hubs} list={hubFiles} onComputer={() => fileInputRef.current?.click()}
+            onClose={() => setPicker(null)} onOpen={(h, path) => (setPicker(null), void openFromHub(`${(h as AppHub).root}/${path}`))} />
+        )}
+        {picker === "save" && (
+          <SaveFile what="the model" types={["mo"]} hubs={hubs} list={hubFiles} name={modelFile ? modelFile.slice(modelFile.lastIndexOf("/") + 1) : `${model?.name}.mo`}
+            onComputer={savePrompt} onClose={() => setPicker(null)}
+            onSave={(h, path) => (setPicker(null), void actions.saveAs(`${(h as AppHub).root}/${path}`).catch((e) => fail(e, "Couldn't save")))} />
+        )}
         {promptModal && (
           <PromptModal
             title={promptModal.title}

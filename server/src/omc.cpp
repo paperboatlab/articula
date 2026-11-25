@@ -192,7 +192,8 @@ struct Omc::Impl {
   int restarts = 0;  // in a row
   bool started_once = false;
   bool shutting_down = false;  // a stop was asked for; never start again
-  std::atomic<bool> cancelled{false};  // Cancel ended the call in flight: fail it, don't retry it
+  std::atomic<bool> cancelled{false};
+  bool msl_tried = false;  // installed the MSL once, if the workspace lacked it  // Cancel ended the call in flight: fail it, don't retry it
   std::vector<std::string> replay;  // loadModel / loadFile calls that succeeded
   StatusFn status_fn;
   LogFn log_fn;
@@ -211,12 +212,12 @@ struct Omc::Impl {
 
   // One paperboat-control/0 request on the lease's connection (or another).
   json control_call(const std::string& op, const json& args) { return control_call(control, op, args); }
-  json control_call(int control, const std::string& op, const json& args) {
+  json control_call(int fd, const std::string& op, const json& args) {
     const int id = next_id++;
-    if (!write_all(control, json{{"id", id}, {"op", op}, {"args", args}}.dump() + "\n")) throw OmcError("paperboatd went away");
+    if (!write_all(fd, json{{"id", id}, {"op", op}, {"args", args}}.dump() + "\n")) throw OmcError("paperboatd went away");
     std::string line;
     for (char c;;) {
-      if (!read_all(control, &c, 1, Clock::now() + 30min)) throw OmcError("paperboatd went away");  // acquire may pull the image
+      if (!read_all(fd, &c, 1, Clock::now() + 30min)) throw OmcError("paperboatd went away");  // acquire may pull the image
       if (c != '\n') {
         line += c;
         continue;
@@ -391,8 +392,20 @@ Omc::Omc(Options options) : impl_(std::make_unique<Impl>()) { impl_->options = s
 
 Omc::~Omc() { impl_->stop(); }
 
-std::string Omc::call(std::string_view expr) { return impl_->call(expr, impl_->options.timeout); }
-std::string Omc::call(std::string_view expr, std::chrono::milliseconds timeout) { return impl_->call(expr, timeout); }
+std::string Omc::call(std::string_view expr) { return call(expr, impl_->options.timeout); }
+std::string Omc::call(std::string_view expr, std::chrono::milliseconds timeout) {
+  std::string out = impl_->call(expr, timeout);
+  // A workspace's first model: the Modelica Standard Library isn't in its package volume yet. Install
+  // it once (the network for that step only, as `paperboat package add omc Modelica` does) and load it.
+  if (expr == "loadModel(Modelica)" && out != "true" && !impl_->msl_tried) {
+    impl_->msl_tried = true;
+    if (impl_->log_fn) impl_->log_fn({"info", "installing the Modelica Standard Library 4.1.0 into this workspace…", "", 0, 0});
+    const auto [code, log] = script("if not installPackage(Modelica, \"4.1.0+maint.om\", exactMatch=true) then exit(1); end if;", true, std::chrono::minutes(10));
+    if (code != 0 && impl_->log_fn) impl_->log_fn({"error", "the Modelica Standard Library could not be installed: " + log, "", 0, 0});
+    out = impl_->call(expr, timeout);
+  }
+  return out;
+}
 
 void Omc::shutdown() {
   std::lock_guard lock(impl_->mutex);

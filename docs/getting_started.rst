@@ -1,30 +1,38 @@
 Getting started
 ===============
 
-Start it from the Paperboat CLI:
+Install and open it with the Paperboat CLI (or the Launcher's Apps page). Installing pulls the ``omc``
+runtime too.
 
 .. code-block:: sh
 
-   paperboat squero start squero-studio-om [Model.mo]   # http://localhost:59201
-   paperboat squero stop squero-studio-om
+   paperboat app install articula
+   paperboat app open articula [<folder>]      # http://127.0.0.1:59240
+   paperboat app stop articula
 
-It listens on 59201, or the next free port up to 59299.
+The Modelica Standard Library is one of the workspace's packages, installed once per folder:
+
+.. code-block:: sh
+
+   paperboat package add omc Modelica --project <folder>
+
+(or Model › Libraries… in Articula, or the Launcher's Runtimes › omc › Packages).
 
 Your first model
 ----------------
 
-- Open a ``.mo`` file from the **files** rail, or File › New Model.
-- Drag parts from the **library** onto the canvas and wire their ports; the source follows every
-  edit.
-- The dock under the canvas counts equations and unknowns; **Check** asks omc to check the model.
-- The side pane shows the source and the scopes; Run › Simulate runs the model and plots it.
+- Open a ``.mo`` from **Files**, or File › New class… (:kbd:`Ctrl Shift N`).
+- Drag parts from **Library** onto the diagram and wire their ports; the text follows every edit.
+- The bar under the diagram counts equations and unknowns; **Check** (:kbd:`Ctrl Shift C`) asks omc.
+- **Simulate** (:kbd:`Ctrl R`) runs the model; check variables in the browser to plot them.
 
-Select a part and press :kbd:`F1` to read its class's documentation, or type a class name
-(``Resistor``) or a full path (``Modelica.Blocks.Continuous.PID``) in Help.
+Select a part and press :kbd:`F1` to read its class's documentation. :kbd:`Ctrl K` searches the
+commands and the workspace's classes.
 
 The workspace
 -------------
 
-Started without a model, the Studio opens its own folder, ``~/Documents/paperboat/squero/om``
-(created if missing; ``SQUERO_OM_WORKSPACE`` overrides it): the first ``.mo`` in it, or a new
-``Untitled.mo`` there. It never writes into the directory it was launched from.
+Articula opens a folder (or a ``.mo``, and the folder holding it or its top package). Started without
+one, it opens its own, ``~/Documents/paperboat/articula`` (``ARTICULA_WORKSPACE`` overrides it): the
+first ``.mo`` in it, or a new ``Untitled.mo``. omc sees only that folder (and the build and library
+folders paperboatd gives it), so models outside it can't be opened.

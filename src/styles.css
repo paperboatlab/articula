@@ -679,3 +679,9 @@ body.dragging-card .library {
 .vgh:hover { background: var(--surface-sunken); }
 .vgh .caret { width: 10px; color: var(--text-muted); font-weight: 400; }
 .vgh small { font: 400 11px var(--font-mono); color: var(--accent-text); } .vgh small.vc { margin-left: auto; color: var(--text-muted); }
+
+/* the library in its card: the package tree over the chosen package's components (OMEdit's browser,
+   with a search over names, ports and docs) */
+.rail .library { flex: 1; min-height: 0; flex-direction: column; border: 0; border-radius: 0; background: none; }
+.rail .lib-tree-col { width: auto; flex: 1 1 50%; min-height: 0; }
+.rail .lib-cards-col { width: auto; flex: 1 1 50%; min-height: 0; border-left: 0; border-top: 1px solid var(--line); }

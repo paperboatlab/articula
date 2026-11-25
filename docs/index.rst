@@ -1,10 +1,10 @@
-Squero Studio: OpenModelica
-===========================
+Articula
+========
 
-Squero Studio OM is an acausal Modelica editor in Paperboat's flat-mono look: a library tree, a
-canvas of components and connectors, a split view of the ``.mo`` and the generated C++, and a dock
-that checks the model's balance and exports a Paperboat station. Every edit goes through
-OpenModelica's ``omc``, so the ``.mo`` stays OMEdit-compatible.
+Articula is an acausal Modelica editor: a library browser, a diagram of components and connectors,
+the model's text, a check that counts equations and unknowns, and Simulate with a plot and a variables
+browser. Every edit goes through OpenModelica's ``omc``, so the ``.mo`` stays OMEdit-compatible. omc
+runs as Paperboat's ``omc`` runtime, in a container, started by ``paperboatd``.
 
 .. toctree::
    :maxdepth: 1

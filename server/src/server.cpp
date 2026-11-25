@@ -646,9 +646,9 @@ json op_delete_package(const json& in) {
   return json{{"dir", dir.string()}};
 }
 
-// The user's config file, squero.toml, shared with Squero Studio MX: $XDG_CONFIG_HOME/paperboat
-// (else ~/.config/paperboat) on Linux and macOS, %APPDATA%\paperboat on Windows. The server only
-// reads and writes the text; @paperboat/shared/editor parses it and patches single keys.
+// The user's config file, articula.toml: $XDG_CONFIG_HOME/paperboat (else ~/.config/paperboat) on
+// Linux and macOS, %APPDATA%\paperboat on Windows. The server only reads and writes the text;
+// @paperboatlab/ui/editor parses it and patches single keys.
 fs::path config_file() {
   const auto env = [](const char* name) { const char* v = std::getenv(name); return std::string(v ? v : ""); };
 #ifdef _WIN32
@@ -656,7 +656,7 @@ fs::path config_file() {
 #else
   fs::path dir = env("XDG_CONFIG_HOME").empty() ? fs::path(env("HOME")) / ".config" : fs::path(env("XDG_CONFIG_HOME"));
 #endif
-  return dir / "paperboat" / "squero.toml";
+  return dir / "paperboat" / "articula.toml";
 }
 
 // Shown to the user, so ~ for the home folder as MX shows it.

@@ -125,9 +125,19 @@ export class OmcClient {
     else waiter.reject(new Error(msg.error ?? 'omc call failed'));
   }
 
+  // Every omc call flips the server's state to checking and back: say "checking" only for a call that
+  // lasts, so a page load's hundreds of quick calls don't redraw the window twice each.
+  private pending: ReturnType<typeof setTimeout> | undefined;
+  private shown = "";
   private setStatus(status: OmcStatus): void {
     this.status = status;
-    this.onStatus(status);
+    clearTimeout(this.pending);
+    const say = () => {
+      const key = `${status.state}|${status.version}|${status.mode ?? ""}`;
+      if (key !== this.shown) (this.shown = key), this.onStatus(status);
+    };
+    if (status.state === "checking" && this.shown) this.pending = setTimeout(say, 400);
+    else say();
   }
 }
 

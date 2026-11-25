@@ -3,7 +3,7 @@
 // with a filter, grouped by component, each with its final value).
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Key, NumberField, Spinner, readStored, writeStored } from "@paperboatlab/ui";
+import { Key, NumberField, Spinner, readStored, writeStored, type Toast } from "@paperboatlab/ui";
 import { Plot2D, type PlotAxes } from "@paperboatlab/ui/plot";
 import { SolverSettings } from "./SolverSettings.tsx";
 import { DEFAULTS, loadSolver, OPTIONS, saveSolver, SOLVERS, summary, type SolverChoice } from "./solver.ts";
@@ -123,9 +123,12 @@ export function Simulate({
   model,
   onRunningChange,
   onRun,
+  onToast,
 }: {
   actions: Actions;
   model: StudioModel;
+  /** A run is background work: it toasts its start and its end (the kit's useToasts().show). */
+  onToast?: (t: Omit<Toast, "id"> & { id?: number }) => number;
   onRunningChange?: (running: boolean) => void;
   onRun?: (run: Run) => void;
 }) {
@@ -149,6 +152,7 @@ export function Simulate({
   const [now, setNow] = useState(0);
   const [error, setError] = useState("");
   const ticket = useRef(0);
+  const toastId = useRef<number | undefined>(undefined);
   // what is plotted, kept per model
   const key = `articula.plot:${model.name}`;
   const [picks, setPicksState] = useState<string[]>(() => readStored(key, isList) ?? []);
@@ -174,6 +178,7 @@ export function Simulate({
     setNow(since);
     setPhase({ state: "running", since, stage: "starting" });
     setError("");
+    const id = (toastId.current = onToast?.({ title: `Simulating ${model.name}`, detail: `to ${t} s`, state: "working" }));
     const onStage = (stage: string) => mine === ticket.current && setPhase((p) => (p.state === "running" ? { ...p, stage } : p));
     try {
       const result = await actions.simulate(t, Object.fromEntries(Object.entries(stimuli).filter(([n]) => inputs.includes(n))), solver, onStage);
@@ -182,18 +187,22 @@ export function Simulate({
       setRunVersion((v) => v + 1);
       onRun?.(result);
       setPhase({ state: "done", ms: Date.now() - since });
+      onToast?.({ id, title: `Simulated ${model.name}`, detail: `${result.names.length - 1} variables in ${Date.now() - since} ms`, state: "done" });
       // a first run plots a few variables, so there is something to look at
       if (!picks.some((n) => result.names.includes(n))) setPicks(defaultPicks(result.names));
     } catch (e) {
       if (mine !== ticket.current) return;
-      setError(explainOmcError((e as Error).message));
+      const why = explainOmcError((e as Error).message);
+      setError(why);
       setPhase({ state: "failed" });
+      onToast?.({ id, title: `Simulating ${model.name} failed`, detail: why || "the Console has omc's messages", state: "failed" });
     }
   };
   /** Stop omc's compile or the model's executable; the run's reply is then dropped. */
   const cancel = () => {
     ticket.current++;
     setPhase({ state: "cancelled" });
+    if (toastId.current !== undefined) onToast?.({ id: toastId.current, title: "Simulation cancelled" });
     void actions.cancelSimulate();
   };
   // Run ▸ Simulate (Ctrl+Enter) and Run ▸ Cancel simulation reach here as events, like the solver's.

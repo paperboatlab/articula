@@ -5,7 +5,7 @@
 // interface sheet on Alt V, the export dock under the stage.
 
 import { ReactFlowProvider } from "@xyflow/react";
-import { AppMark, Key, MenuBar, Panel, PanelsKey, Search, Segmented, Split as Gutter, ThemePicker, readStored, writeStored, type PaneRect, type SearchItem } from "@paperboatlab/ui";
+import { AppMark, Key, MenuBar, Notifications, Panel, PanelsKey, Search, Segmented, Split as Gutter, ThemePicker, Toasts, readStored, useToasts, writeStored, type PaneRect, type SearchItem } from "@paperboatlab/ui";
 import { HelpWindow } from "@paperboatlab/ui";
 import { afterClose, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
 import { helpCommand, SEARCH_CHORD, useShortcuts, type Command } from "@paperboatlab/ui";
@@ -159,7 +159,26 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       setLogs((l) => [...l, { level: message.level === "warning" ? "warn" : message.level, text: `${message.text}${at}` }]);
     });
   }, [omc]);
-  const fail = (e: Error) => say(e.message, "error");
+  // Toasts (kit §10): background work and its end; the Console keeps the log lines. A failure also
+  // toasts, as the Console is often hidden.
+  const notes = useToasts();
+  const { show } = notes;
+  const fail = (e: Error, title = "Couldn't do that") => {
+    say(e.message, "error");
+    show({ title, detail: e.message, state: "failed" });
+  };
+  // omc's session: a loss after it was up stays until dismissed; its return turns the same toast done.
+  const session = useRef<{ up: boolean; id?: number }>({ up: false });
+  useEffect(() => {
+    const s = session.current;
+    if (status.state === "ready" && s.id !== undefined) {
+      show({ id: s.id, title: "OpenModelica is back", detail: "a new omc session", state: "done" });
+      s.id = undefined;
+    } else if (status.state === "failed" && s.up && s.id === undefined) {
+      s.id = show({ title: "OpenModelica stopped", detail: "The next call starts a new session; the Console has omc's last messages.", state: "failed" });
+    }
+    if (status.state === "ready") s.up = true;
+  }, [status.state, show]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const classes = useClassIndex(omc);
 
@@ -483,11 +502,14 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       return;
     }
     await saveCurrent();
+    const id = show({ title: `Exporting ${api.model.name}`, detail: "packing the station", state: "working" });
     const outcome = await runStationExport(api, "pst", () => {});
     if (outcome.ok) {
       say(`Exported ${outcome.line}`);
+      show({ id, title: `Exported ${api.model.name}`, detail: outcome.line, state: "done" });
     } else {
       say(`Export failed: ${outcome.line}`, "error");
+      show({ id, title: "Export failed", detail: outcome.line, state: "failed" });
     }
   };
 
@@ -631,7 +653,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         shortcut: "Ctrl+S",
         chord: { key: "s", ctrl: true },
         enabled: Boolean(model),
-        run: () => void saveCurrent().catch(fail),
+        run: () => void saveCurrent().catch((e) => fail(e, "Couldn't save")),
       },
       {
         id: "file.save-as",
@@ -647,7 +669,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             label: "File Path",
             value: model?.file ?? `${model?.name}.mo`,
             confirmLabel: "Save",
-            onConfirm: (path) => actions.saveAs(path).catch(fail),
+            onConfirm: (path) => actions.saveAs(path).catch((e) => fail(e, "Couldn't save")),
           }),
       },
       {
@@ -752,6 +774,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             <OmcKey status={status} running={running} onLibraries={() => setPackagesOpen(true)} />
             <PanelsKey panels={PANELS.map((p) => ({ id: p.side, label: p.name, keys: p.keys, shown: !hidden[p.side] }))} layout={LAYOUT} onToggle={(id) => toggle(id as Side)} />
             <span className="lsep" />
+            <Notifications {...notes} />
             <ThemePicker theme={theme} onChange={setTheme} />
           </span>
         </header>
@@ -858,7 +881,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                 { value: "scopes", label: "Plots", hint: "The plots fill the card" },
               ]} />}>
               <Split model={model} actions={actions} view={view} onView={setView} settings={settings.editor} appTheme={shown} />
-              <Simulate actions={actions} model={model} onRunningChange={setRunning} onRun={(r) => setShapeRun(r.shapes?.length ? r : null)} />
+              <Simulate actions={actions} model={model} onToast={show} onRunningChange={setRunning} onRun={(r) => setShapeRun(r.shapes?.length ? r : null)} />
             </Panel>
             </Gutter>
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
@@ -901,20 +924,27 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
 
         {libraryModalOpen && (
           <LibraryModal
-            onLoad={(lib) => actions.loadLibrary(lib).catch(fail)}
+            onLoad={(lib) => {
+              const id = show({ title: `Loading ${lib}`, state: "working" });
+              return actions.loadLibrary(lib).then(
+                () => void show({ id, title: `Loaded ${lib}`, detail: "in the Library", state: "done" }),
+                (e: Error) => (say(e.message, "error"), void show({ id, title: `Couldn't load ${lib}`, detail: e.message, state: "failed" })),
+              );
+            }}
             onClose={() => setLibraryModalOpen(false)}
           />
         )}
 
         {packagesOpen && (
           <PackageWindow title="Modelica libraries" tags={[status.version || "omc", "this workspace"]} onClose={() => setPackagesOpen(false)}>
-            <Packages omc={omc} onInstalled={(name) => say(`Installed ${name}: load it from the Library`)} />
+            <Packages omc={omc} onInstalled={(name) => show({ title: `Installed ${name}`, detail: "load it from the Library", state: "done" })} />
           </PackageWindow>
         )}
 
         {aboutOpen && <AboutModal omc={omc} status={status} onClose={() => setAboutOpen(false)} />}
         {helpQuery !== null && <HelpWindow app="Articula" provider={helpProvider} commands={commands} query={helpQuery} onClose={() => setHelpQuery(null)} />}
 
+        <Toasts toasts={notes.toasts} onDismiss={notes.dismiss} />
         {searchOpen && <Search items={searchItems} scopes={["All", "Commands", "Files"]} placeholder={`Search ${workspace ? workspaceName(workspace) : "the workspace"}, or run a command`} onClose={() => setSearchOpen(false)} />}
 
       </div>

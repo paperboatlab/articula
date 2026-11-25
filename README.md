@@ -9,7 +9,7 @@ Acausal modelling: an OpenModelica editor with a library browser, a diagram, the
 check, and Simulate with a plot and a variables browser. A C++ server speaks to omc, which runs as
 Paperboat's `omc` runtime in a container. Part of [Paperboat](https://github.com/paperboatlab/paperboat).
 
-**Docs:** <https://paperboatlab.github.io/apps/articula/> (sources in [`docs/`](docs/))
+**Docs:** <https://paperboatlab.org/apps/articula/> (sources in [`docs/`](docs/))
 
 **Status:** v0.1, rebuilt on the new platform from Squero Studio OM, archived as
 [squero-studio-om-legacy](https://github.com/paperboatlab/squero-studio-om-legacy).

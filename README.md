@@ -5,9 +5,53 @@
   </picture>
 </h1>
 
-Acausal physical modelling: an OpenModelica editor (a C++ `omc` server and a web UI) that exports Simplicial stations. Part of [Paperboat](https://github.com/paperboatlab/paperboat).
+Acausal modelling: an OpenModelica editor with a library browser, a diagram, the model's text, a model
+check, and Simulate with a plot and a variables browser. A C++ server speaks to omc, which runs as
+Paperboat's `omc` runtime in a container. Part of [Paperboat](https://github.com/paperboatlab/paperboat).
 
-**Status:** being rebuilt from the ground up on the new platform ([paperboat](https://github.com/paperboatlab/paperboat): runtimes in containers; [paperboat-ui](https://github.com/paperboatlab/paperboat-ui): the rebrand). The previous version, to copy from: [squero-studio-om-legacy](https://github.com/paperboatlab/squero-studio-om-legacy) (archived).
+**Docs:** <https://paperboatlab.github.io/apps/articula/> (sources in [`docs/`](docs/))
+
+**Status:** v0.1, rebuilt on the new platform from Squero Studio OM, archived as
+[squero-studio-om-legacy](https://github.com/paperboatlab/squero-studio-om-legacy).
+**Design:** [ARCHITECTURE.md](ARCHITECTURE.md) · **Look:** [@paperboatlab/ui](https://github.com/paperboatlab/paperboat-ui)
+
+## Layout
+
+```text
+server/        the app server (C++20): articula/0 over WebSocket, omc through paperboatd, the importer
+src/           the page (React, @paperboatlab/ui), built into dist/
+bin/articula   the command
+docs/          the manual (reStructuredText)
+examples/      models to open
+```
+
+## Install
+
+```sh
+paperboat app install articula      # pulls the omc runtime too
+```
+
+```sh
+npm ci && npm run build && npm run build:server
+paperboat app install articula --from .
+```
+
+## Run
+
+```sh
+paperboat app open articula ~/models        # or: bin/articula ~/models
+paperboat package add omc Modelica --project ~/models   # the Modelica Standard Library, once per folder
+```
+
+Opens at `http://127.0.0.1:59240/`. omc needs `paperboatd` (the `paperboat-cli` package, or
+`PAPERBOATD=/path/to/paperboatd`) and podman or docker.
+
+## Check
+
+```sh
+npm run typecheck && npm test && npm run build
+npm run build:server && npm run test:server   # the [omc] tests need paperboatd
+```
 
 ## Licence
 

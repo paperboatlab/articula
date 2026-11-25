@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui:
+    name: Page (typecheck, tests, build)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  server:
+    # omc comes from paperboatd (the omc runtime); without it the [omc] tests skip and the rest run.
+    name: Server (build, tests)
+    runs-on: ubuntu-24.04
+    env:
+      CXX: g++-14
+      CC: gcc-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build
+      - run: cmake -S server -B server/build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DARTICULA_BUILD_TESTS=ON
+      - run: cmake --build server/build
+      - run: server/build/articula_tests

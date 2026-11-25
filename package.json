@@ -1,0 +1,49 @@
+{
+  "name": "articula",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Paperboat Articula: acausal modelling, an OpenModelica editor",
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paperboatlab/articula.git"
+  },
+  "type": "module",
+  "bin": {
+    "articula": "bin/articula"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "dev": "node scripts/build.ts --watch",
+    "build:server": "cmake -S server -B server/build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build server/build",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test.ts",
+    "test:server": "server/build/articula_tests"
+  },
+  "devDependencies": {
+    "@codemirror/autocomplete": "^6.20.4",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/legacy-modes": "^6.5.5",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/merge": "^6.12.3",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "@lezer/highlight": "^1.2.5",
+    "@paperboatlab/ui": "github:paperboatlab/paperboat-ui#2d19be4fbf67962c0555c32d8b75a33810e9e4f0",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.187.0",
+    "@xyflow/react": "^12.12.1",
+    "esbuild": "^0.25.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.187.0",
+    "typescript": "^7.0.2",
+    "uplot": "^1.6.32"
+  }
+}

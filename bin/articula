@@ -1,0 +1,9 @@
+#!/bin/sh
+# Paperboat Articula: `articula [<folder>|Model.mo] [--port N]` (the server; the page is dist/).
+# omc comes from paperboatd (the omc runtime), started on demand.
+here=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+for b in "${ARTICULA_SERVER:-}" "$here/server/build/articula-server" "$here/bin/articula-server"; do
+  [ -n "$b" ] && [ -x "$b" ] && exec "$b" --app "$here/dist" "$@"
+done
+echo "articula: the server isn't built: npm run build:server" >&2
+exit 1

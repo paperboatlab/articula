@@ -9,4 +9,4 @@ minutes.
 
 In the station, the model's parameters (a ``parameter Real C1F``) are props of its Station object,
 edited on the Station page; the Flow block carries only the inputs and outputs. See the
-`Paperboat user manual <https://paperboatlab.github.io/paperboat/user_manual.html>`_ for running it.
+`Paperboat user manual <https://paperboatlab.org/paperboat/user_manual.html>`_ for running it.

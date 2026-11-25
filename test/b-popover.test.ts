@@ -1,0 +1,89 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import {
+  bindParamToTopLevel,
+  commitParamValue,
+  exposeComponentPort,
+  paramUnit,
+  parseParamBinding,
+  popoverSpot,
+  portActionFor,
+  resolveParamNumber,
+  unbindParam,
+} from "../src/popover/popover.ts";
+import { createFakeStudio } from "./fake.ts";
+
+test("popover: commit numeric param calls setParam('R1.R', v)", async () => {
+  const api = createFakeStudio();
+  await commitParamValue(api, "R1", "R", 47.5);
+  assert.deepEqual(api.calls.at(-1), {
+    method: "setParam",
+    args: ["R1.R", "47.5"],
+  });
+  const r1 = api.model.components.find((c) => c.name === "R1")!;
+  assert.equal(r1.params.R, "47.5");
+  assert.equal(paramUnit("R", api.model), "Ohm");
+});
+
+test("popover: '=' binds a param to a top-level parameter and produces the right setParam calls", async () => {
+  const api = createFakeStudio();
+  const r1 = api.model.components.find((c) => c.name === "R1")!;
+  assert.equal(r1.params.R, "10");
+
+  const ok = await bindParamToTopLevel(api, "R1", "R", "R_load", r1.params.R);
+  assert.equal(ok, true);
+
+  assert.deepEqual(api.calls.slice(-2), [
+    { method: "addVariable", args: ["R_load", "10", false] },
+    { method: "setParam", args: ["R1.R", "R_load"] },
+  ]);
+
+  const topParam = api.model.params.find((p) => p.id === "R_load");
+  assert.ok(topParam, "created top-level parameter R_load");
+  assert.equal(topParam.default, 10);
+
+  const parsed = parseParamBinding("R", r1.params.R);
+  assert.equal(parsed.bound, "R_load");
+  assert.equal(parsed.modifierText, "R = R_load");
+  assert.equal(resolveParamNumber("R", r1.params.R, api.model), 10);
+
+  // Rejects invalid identifier names
+  const bad = await bindParamToTopLevel(api, "R1", "R", "123 bad", "10");
+  assert.equal(bad, false);
+
+  // Unbinding restores the resolved numeric value
+  await unbindParam(api, "R1", "R", "R_load");
+  assert.equal(r1.params.R, "10");
+});
+
+test("popover: port actions map causal inputs to + Input; a physical pin gets no button (a probe there is a type error)", async () => {
+  const api = createFakeStudio();
+  const r1 = api.model.components.find((c) => c.name === "R1")!;
+  const pPort = r1.ports.find((p) => p.id === "p")!;
+  const uPort = r1.ports.find((p) => p.id === "u")!;
+
+  const pAction = portActionFor(r1, pPort, api.model.connectors, api.model.entries);
+  assert.equal(pAction.kind, "output");
+  assert.equal(pAction.buttonLabel, "+ Probe");
+  assert.equal(pAction.unit, "V");
+  assert.equal(pAction.causal, false);
+
+  const uAction = portActionFor(r1, uPort, api.model.connectors, []);
+  assert.equal(uAction.kind, "input");
+  assert.equal(uAction.buttonLabel, "+ Input");
+  assert.equal(uAction.causal, true);
+
+  await exposeComponentPort(api, r1, uPort);
+  assert.deepEqual(api.calls.at(-1), {
+    method: "addEntry",
+    args: ["input", "R1.u"],
+  });
+});
+
+test("popover: sits right of the block, flips left at the edge, stays inside", () => {
+  const pop = { w: 250, h: 200 };
+  const box = { w: 1000, h: 600 };
+  assert.deepEqual(popoverSpot({ x: 100, y: 100, w: 60, h: 40 }, pop, box), { left: 168, top: 100 });
+  assert.deepEqual(popoverSpot({ x: 900, y: 100, w: 60, h: 40 }, pop, box), { left: 642, top: 100 });
+  assert.deepEqual(popoverSpot({ x: 100, y: 580, w: 60, h: 40 }, pop, box), { left: 168, top: 392 });
+});

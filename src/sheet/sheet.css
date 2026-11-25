@@ -1,0 +1,613 @@
+/* Interface sheet & Look tab (contracts §8.3).
+   Uses semantic tokens from @paperboat/shared/tokens.css only. */
+
+.studio-sheet,
+.studio-sheet * {
+  box-sizing: border-box;
+}
+
+.studio-sheet {
+  grid-area: sheet;
+  width: 396px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  font: 400 var(--size-xs) var(--font-sans);
+  overflow: hidden;
+  transition: width var(--slide);
+}
+
+/* Folded to a thin standing tab; the head and body come back when it opens. */
+.studio-sheet:not(.open) { width: 34px; }
+.studio-sheet > [hidden] { display: none; }
+.studio-sheet > :not(.studio-sheet-tab) { min-width: 394px; }
+
+.studio-sheet-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: 500 var(--size-xs) var(--font-sans);
+  cursor: pointer;
+}
+.studio-sheet-tab:hover { color: var(--text); background: var(--surface-sunken); }
+.studio-sheet-tab svg, .studio-sheet-fold svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; display: block; }
+.studio-sheet-tab-name { writing-mode: vertical-rl; transform: rotate(180deg); }
+.studio-sheet-glyph { font: 600 var(--size-sm) var(--font-mono); color: var(--text); }
+.studio-sheet-fold { width: 24px; height: 24px; padding: 0; display: inline-grid; place-items: center; }
+
+.studio-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  height: var(--panel-head-height);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+.studio-sheet-title {
+  font: 600 var(--size-sm) var(--font-sans);
+  color: var(--text);
+  margin: 0;
+}
+
+.studio-sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Choice switch (shared Switch component) */
+.studio-sheet .switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  flex-wrap: nowrap;
+}
+
+.studio-sheet .switch > .lbl {
+  font: 400 var(--size-2xs) var(--font-sans);
+  color: var(--text-muted);
+  margin-right: var(--space-1);
+  min-width: 42px;
+}
+
+.studio-sheet .switch .opt {
+  border: 0;
+  background: none;
+  padding: 2px 3px;
+  font: 400 var(--size-2xs) var(--font-mono);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.studio-sheet .switch .opt::before {
+  content: "[";
+  margin-right: 2px;
+  visibility: hidden;
+}
+
+.studio-sheet .switch .opt::after {
+  content: "]";
+  margin-left: 2px;
+  visibility: hidden;
+}
+
+.studio-sheet .switch .opt.on {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.studio-sheet .switch .opt.on::before,
+.studio-sheet .switch .opt.on::after {
+  visibility: visible;
+}
+
+/* Sections */
+.studio-sheet-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.studio-sheet-subhead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: 600 var(--size-2xs) var(--font-sans);
+  color: var(--text-muted);
+}
+
+.studio-sheet-subhead::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.studio-prop-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px 44px;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 26px;
+}
+
+.studio-prop-name {
+  font: 500 var(--size-xs) var(--font-mono);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-prop-input {
+  width: 100%;
+  height: 24px;
+  padding: 0 var(--space-2);
+  background: var(--surface-well);
+  box-shadow: var(--well-shadow);
+  border: 0;
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font: 400 var(--size-xs) var(--font-mono);
+  text-align: right;
+}
+
+.studio-prop-input:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.studio-prop-unit {
+  font: 400 var(--size-2xs) var(--font-mono);
+  color: var(--text-muted);
+}
+
+/* Variables (Paperboat's Variables sheet: name, value, type, public/private) */
+.studio-var-add {
+  margin-left: auto;
+  order: 2;
+}
+
+.studio-var-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.studio-var-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 84px 44px 56px 20px;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 26px;
+}
+
+.studio-var-name {
+  text-align: left;
+}
+
+.studio-var-grip {
+  font: 600 var(--size-xs) var(--font-mono);
+  color: var(--text-muted);
+  cursor: grab;
+  text-align: center;
+}
+
+.studio-var-vis {
+  height: 22px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-well);
+  color: var(--text-muted);
+  font: 400 var(--size-2xs) var(--font-mono);
+  cursor: pointer;
+}
+
+.studio-var-vis.on {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.studio-var-error {
+  margin: 0;
+  font: 400 var(--size-2xs) var(--font-sans);
+  color: var(--danger, #c33);
+}
+
+/* Entry pills (inputs left, outputs right) */
+.studio-entries-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.studio-entries-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.studio-entries-col-head {
+  font: 400 var(--size-2xs) var(--font-sans);
+  color: var(--text-muted);
+}
+
+.studio-entry-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 10px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-round);
+  font: 400 var(--size-2xs) var(--font-mono);
+  color: var(--text);
+  min-width: 0;
+}
+
+.studio-entry-tag {
+  font: 600 var(--size-2xs) var(--font-sans);
+  color: var(--text-muted);
+}
+
+.studio-entry-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.studio-remove {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-round);
+  background: var(--surface-raised);
+  color: var(--text);
+  cursor: pointer;
+  flex: none;
+}
+
+.studio-remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.studio-remove svg {
+  width: 8px;
+  height: 8px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+/* Linked block preview & CompactBlock support */
+.studio-linked-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.studio-handoff-note {
+  margin: 0;
+  font: 400 var(--size-2xs) var(--font-sans);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.studio-handoff-note code {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+/* Compact plate and port handle rules when rendered inside sheet preview */
+.studio-sheet .compact-block {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: var(--size-xs);
+}
+
+.studio-sheet .plate {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 56px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+}
+
+.studio-sheet .icon-art {
+  display: block;
+  pointer-events: none;
+}
+
+.studio-sheet .plate-cap {
+  display: flex;
+  gap: 5px;
+  white-space: nowrap;
+  font: 400 var(--size-2xs) var(--font-sans);
+  color: var(--text-muted);
+}
+
+.studio-sheet .react-flow__handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--surface-raised);
+  border: 1.5px solid var(--line-ink);
+  transform: translate(-50%, -50%);
+}
+
+.studio-sheet .react-flow__handle.react-flow__handle-left {
+  left: 0;
+}
+
+.studio-sheet .react-flow__handle.react-flow__handle-right {
+  left: 100%;
+}
+
+.studio-sheet .react-flow__handle.react-flow__handle-top {
+  top: 0;
+}
+
+.studio-sheet .react-flow__handle.react-flow__handle-bottom {
+  top: 100%;
+}
+
+.studio-sheet .react-flow__handle.ip-circle {
+  border-radius: var(--radius-round);
+}
+
+.studio-sheet .react-flow__handle.ip-filled {
+  background: var(--line-ink);
+}
+
+.studio-sheet .react-flow__handle.ip-triangle {
+  background: var(--line-ink);
+  border: 0;
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+
+.studio-sheet .port-tip {
+  display: none;
+}
+
+/* Look tab */
+.studio-look-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.studio-look-key {
+  height: 24px;
+  padding: 0 8px;
+  font: 500 var(--size-2xs) var(--font-mono);
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.studio-look-key:hover:not(:disabled) {
+  border-color: var(--line-ink);
+}
+
+.studio-look-key.on {
+  border-color: var(--line-ink);
+  font-weight: 600;
+}
+
+.studio-look-key:disabled {
+  color: var(--text-muted);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.studio-look-canvas-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.studio-look-canvas {
+  width: 164px;
+  height: 164px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.studio-look-grid-dot {
+  fill: var(--dots);
+}
+
+.studio-look-sel-box {
+  fill: none;
+  stroke: var(--line-ink);
+  stroke-width: 0.8;
+  stroke-dasharray: 2 2;
+  pointer-events: none;
+}
+
+.studio-look-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.studio-look-port-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.studio-look-at-input {
+  width: 54px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--surface-well);
+  box-shadow: var(--well-shadow);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: 400 var(--size-2xs) var(--font-mono);
+  text-align: right;
+}
+
+/* Light and Dark side-by-side preview */
+.studio-preview-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.studio-preview-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: var(--space-2);
+  background: var(--surface-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--text);
+}
+
+.studio-preview-tile[data-theme="light"] {
+  --surface-ground: var(--grey-200);
+  --surface-panel: var(--grey-100);
+  --surface-raised: var(--grey-50);
+  --surface-sunken: var(--grey-200);
+  --text: var(--grey-900);
+  --text-muted: var(--grey-600);
+  --line: var(--grey-300);
+  --line-strong: var(--grey-500);
+  --line-ink: var(--grey-900);
+}
+
+.studio-preview-tile[data-theme="dark"] {
+  --surface-ground: var(--night-300);
+  --surface-panel: var(--night-200);
+  --surface-raised: var(--night-100);
+  --surface-sunken: var(--night-300);
+  --text: var(--night-900);
+  --text-muted: var(--night-600);
+  --line: var(--night-50);
+  --line-strong: var(--night-500);
+  --line-ink: var(--night-900);
+}
+
+.studio-preview-caption {
+  font: 400 var(--size-2xs) var(--font-mono);
+  color: var(--text-muted);
+}
+
+.studio-look-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--line);
+}
+
+.studio-save-key {
+  height: 28px;
+  padding: 0 14px;
+  font: 600 var(--size-xs) var(--font-sans);
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-ink);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+/* ---- Variables tree (#43): OMEdit's browser, and Paperboat's passthrough list ---------------- */
+.var-tree { display: flex; flex-direction: column; gap: 6px; }
+.var-tree-head { display: flex; align-items: center; gap: 6px; }
+.var-filter { flex: 1; min-width: 0; height: 28px; padding: 0 8px; font: 400 var(--size-2xs) var(--font-mono); color: var(--text); }
+.var-tree-body { max-height: 330px; overflow: auto; display: flex; flex-direction: column; gap: 1px; }
+.var-group { display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 3px 2px; font: 500 var(--size-2xs) var(--font-mono); color: var(--text); text-align: left; cursor: pointer; }
+.var-group .lbl { margin-left: auto; }
+.var-component { display: flex; flex-direction: column; }
+.var-component-head { display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 2px 2px 2px 18px; font: 400 11px var(--font-mono); color: var(--text-muted); text-align: left; cursor: pointer; }
+.var-row { display: flex; align-items: center; gap: 5px; min-height: 24px; padding: 1px 2px 1px 18px; font: 400 11px var(--font-mono); color: var(--text-muted); }
+.var-row.protected { opacity: .75; }
+.component-row { padding-left: 34px; }
+.var-kind { width: 14px; flex: none; text-align: center; font-weight: 600; color: var(--text); }
+.var-kind-parameter { color: var(--signal); }
+.var-kind-input, .var-kind-output { color: var(--dom-signal, var(--signal)); }
+.var-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.var-name-input { flex: 1 1 auto; min-width: 50px; border: 0; background: transparent; padding: 1px 2px; font: inherit; color: var(--text); }
+.var-type { flex: none; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .7; }
+.var-tag { flex: none; padding: 0 3px; border: 1px solid var(--line); border-radius: 3px; font-size: 9.5px; color: var(--text-muted); }
+.var-tag.parameter { color: var(--signal); border-color: var(--signal); }
+.var-tag.protected { color: var(--text-muted); }
+.var-value { flex: none; min-width: 46px; text-align: right; color: var(--text); }
+.var-value-input { width: 68px; height: 22px; padding: 0 4px; border: 0; background: var(--surface-well); box-shadow: var(--well-shadow); border-radius: 3px; font: 400 11px var(--font-mono); color: var(--text); text-align: right; }
+.var-pass { flex: none; height: 20px; padding: 0 5px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-raised); font: 500 9.5px var(--font-mono); color: var(--text-muted); cursor: pointer; }
+.var-pass.on { border-color: var(--line-ink); color: var(--text); }
+.var-pass-na { flex: none; width: 60px; text-align: center; color: var(--text-muted); }
+.var-remove { flex: none; border: 0; background: none; color: var(--text-muted); cursor: pointer; font-size: 13px; }
+.var-empty { margin: 2px 0 4px 18px; font: 400 10.5px var(--font-sans); color: var(--text-muted); }
+
+/* ---- Paperboat block editor (#43): one plate, its name and pins ---------------------------- */
+.paperboat-block { display: flex; flex-direction: column; gap: 8px; padding: var(--space-2); background: var(--surface-sunken); border: 1px solid var(--line); border-radius: var(--radius-md); }
+.paperboat-block-preview { display: flex; justify-content: center; min-height: 96px; align-items: center; }
+.paperboat-block-preview .plate-cap { display: none; }
+.paperboat-block-preview .compact-block { min-width: 120px; }
+.paperboat-block-ports { display: flex; flex-direction: column; gap: 2px; }
+.paperboat-block-port { display: flex; align-items: center; gap: 6px; min-height: 24px; min-width: 0; font: 400 11px var(--font-mono); color: var(--text); }
+.paperboat-block-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.paperboat-block-foot { display: flex; align-items: center; gap: 8px; }
+.paperboat-block-foot .studio-prop-unit { margin-right: auto; }

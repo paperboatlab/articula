@@ -69,7 +69,7 @@ export function NewClassSheet({
           <h2>New Class</h2>
           <span className="sub">{within || "workspace root"}</span>
           <span className="spacer" />
-          <button type="button" className="key small" onClick={onClose} disabled={busy}>
+          <button type="button" className="key sm" onClick={onClose} disabled={busy}>
             Close
           </button>
         </header>
@@ -127,10 +127,10 @@ export function NewClassSheet({
           <footer className="new-class-foot">
             <span className="note">the workspace stays visible behind it</span>
             <span className="spacer" />
-            <button type="button" className="key small" onClick={onClose} disabled={busy}>
+            <button type="button" className="key sm" onClick={onClose} disabled={busy}>
               Cancel
             </button>
-            <button type="submit" className="key small ink" disabled={!valid || busy}>
+            <button type="submit" className="key sm primary" disabled={!valid || busy}>
               {busy ? "Creating…" : "Create class"}
             </button>
           </footer>

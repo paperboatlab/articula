@@ -1,8 +1,10 @@
-import { CORNER, DASH, FILL, FONT, iconValid, SIZE, STROKE, WEIGHT, type BlockDef, type Corner, type Dash, type Fill, type IconDef, type IconPort, type Prim, type Pt, type Stroke, type Weight } from "@paperboatlab/ui/canvas";
+import { CELL, CORNER, DASH, FILL, FONT, iconValid, SIZE, STROKE, WEIGHT, type BlockDef, type Corner, type Dash, type Fill, type IconDef, type IconPort, type Prim, type Pt, type Stroke, type Weight } from "@paperboatlab/ui/canvas";
 import type { EntryPoint, StudioModel } from "../model/types.ts";
 
-export type PlateSizeKey = "1x1" | "2x1" | "1x2";
-export const PLATE_SIZES: readonly PlateSizeKey[] = ["1x1", "2x1", "1x2"];
+/** Rows x columns, as a matrix is counted: "1x2" is one row of two cells (wide), "2x1" two rows (tall). */
+export type PlateSizeKey = "1x1" | "1x2" | "2x1";
+export const PLATE_SIZES: readonly PlateSizeKey[] = ["1x1", "1x2", "2x1"];
+const PLATE_WH: Record<PlateSizeKey, [1 | 2, 1 | 2]> = { "1x1": [1, 1], "1x2": [2, 1], "2x1": [1, 2] };
 
 export const PRIM_KINDS: readonly Prim["t"][] = ["line", "poly", "rect", "ellipse", "arc", "text"];
 
@@ -67,14 +69,38 @@ export function snapTo5(n: number): number {
 }
 
 export function plateSizeKey(icon: IconDef | undefined): PlateSizeKey {
-  if (icon?.w === 2 && (icon?.h ?? 1) === 1) return "2x1";
-  if ((icon?.w ?? 1) === 1 && icon?.h === 2) return "1x2";
+  if (icon?.w === 2 && (icon?.h ?? 1) === 1) return "1x2";
+  if ((icon?.w ?? 1) === 1 && icon?.h === 2) return "2x1";
   return "1x1";
 }
 
+/**
+ * The icon on another plate, its drawing keeping its proportions: the 0..100 grid stretches to the
+ * plate, so the shapes are rescaled about the centre to look the same, shrunk only when they no
+ * longer fit. Coordinates snap to the grid (a few units of rounding on the long axis).
+ */
 export function applyPlateSize(icon: IconDef, size: PlateSizeKey): IconDef {
-  const [w, h]: [1 | 2, 1 | 2] = size === "2x1" ? [2, 1] : size === "1x2" ? [1, 2] : [1, 1];
-  return { ...icon, w, h };
+  const [w, h] = PLATE_WH[size];
+  const inner = (cells: number, cell: number) => cell * cells - 16;  // the kit's 8px padding each side
+  const [ow, oh, nw, nh] = [inner(icon.w ?? 1, CELL.w), inner(icon.h ?? 1, CELL.h), inner(w, CELL.w), inner(h, CELL.h)];
+  const xs: number[] = [], ys: number[] = [];
+  for (const p of icon.g) {
+    if (p.t === "line" || p.t === "poly") p.p.forEach(([x, y]) => (xs.push(x), ys.push(y)));
+    else if (p.t === "text") (xs.push(p.x), ys.push(p.y));
+    else (xs.push(p.x, p.x + p.w), ys.push(p.y, p.y + p.h));
+  }
+  const reach = (vs: number[], px: number) => Math.max(0, ...vs.map((v) => (Math.abs(v - 50) * px) / 100));  // px from the centre
+  const [rx, ry] = [reach(xs, ow), reach(ys, oh)];
+  const k = Math.min(1, rx ? nw / 2 / rx : 1, ry ? nh / 2 / ry : 1);
+  const X = (x: number) => snapTo5(50 + ((x - 50) * k * ow) / nw);
+  const Y = (y: number) => snapTo5(50 + ((y - 50) * k * oh) / nh);
+  const g = icon.g.map((p): Prim => {
+    if (p.t === "line" || p.t === "poly") return { ...p, p: p.p.map(([x, y]): Pt => [X(x), Y(y)]) };
+    if (p.t === "text") return { ...p, x: X(p.x), y: Y(p.y) };
+    const [x, y] = [X(p.x), Y(p.y)];
+    return { ...p, x, y, w: Math.max(5, X(p.x + p.w) - x), h: Math.max(5, Y(p.y + p.h) - y) };
+  });
+  return { ...icon, w, h, g };
 }
 
 export type PrimStyle = {
@@ -387,8 +413,7 @@ export function setPortPlacement(
 }
 
 export function sanitizeIconDef(icon: IconDef, entries?: EntryPoint[]): IconDef {
-  const size = plateSizeKey(icon);
-  const [w, h]: [1 | 2, 1 | 2] = size === "2x1" ? [2, 1] : size === "1x2" ? [1, 2] : [1, 1];
+  const [w, h] = PLATE_WH[plateSizeKey(icon)];
   const g = Array.isArray(icon.g) ? icon.g.map(sanitizePrim) : [];
   let ports = icon.ports?.map((p) => ({
     ...p,

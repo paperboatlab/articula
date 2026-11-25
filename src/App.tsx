@@ -5,8 +5,9 @@
 // interface sheet on Alt V, the export dock under the stage.
 
 import { ReactFlowProvider } from "@xyflow/react";
-import { AppMark, Key, MenuBar, Panel, PanelsKey, Search, Segmented, ThemePicker, readStored, writeStored, type PaneRect, type SearchItem } from "@paperboatlab/ui";
+import { AppMark, Key, MenuBar, Panel, PanelsKey, Search, Segmented, Split as Gutter, ThemePicker, readStored, writeStored, type PaneRect, type SearchItem } from "@paperboatlab/ui";
 import { HelpWindow } from "@paperboatlab/ui";
+import { afterClose, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
 import { helpCommand, SEARCH_CHORD, useShortcuts, type Command } from "@paperboatlab/ui";
 import { omHelp } from "./shell/help.ts";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
@@ -104,6 +105,9 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   // which cards are hidden (the Panels key, Ctrl B / Ctrl J / Ctrl Alt B), kept between visits
   const [hidden, setHidden] = useState<Record<Side, boolean>>(() => readStored("articula.panels", isHidden) ?? { l: false, r: false, b: true });
   useEffect(() => writeStored("articula.panels", hidden), [hidden]);
+  // The right card's width, dragged on the gutter beside it (double-click: back to 420).
+  const [simWidth, setSimWidth] = useState(() => readStored("articula.simWidth", (v): v is number => typeof v === "number") ?? 420);
+  useEffect(() => writeStored("articula.simWidth", simWidth), [simWidth]);
   const toggle = (side: Side, h?: boolean) => setHidden((now) => ({ ...now, [side]: h ?? !now[side] }));
   const side = !hidden.r;
   const setSide = (f: (shown: boolean) => boolean) => toggle("r", !f(side));
@@ -114,6 +118,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [stageView, setStageView] = useState<Stage>("diagram");
   // the workspace and its open documents (#43): the rail lists the folder, the tabs switch files
   const [docs, setDocs] = useState<Doc[]>([]);
+  const [pinned, setPinned] = useState<ReadonlySet<string>>(new Set());
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   // The rail opens on the files of the Studio's folder, as MX does; the library is a click away.
   const [rail, setRail] = useState<RailTab>("files");
@@ -284,14 +289,25 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     }
   };
 
-  const closeDocument = async (doc: Doc) => {
-    if (docs.length < 2) return;
-    const rest = closeDoc(docs, doc.file);
-    setDocs(rest);
-    if (doc.file !== model?.file) return;
-    const next = neighbour(docs, doc.file);
-    if (next) await openDocument(next.file);
+  /** Close tabs (the kit's rules: the right neighbour shows, else the left). A model always shows, so
+   *  closing every tab keeps the shown one; the shown one is saved by openDocument before it goes. */
+  const closeDocuments = async (paths: string[]) => {
+    const current = model?.file ?? null;
+    const closing = paths.length >= docs.length ? paths.filter((p) => p !== current) : paths;
+    if (!closing.length) return;
+    const after = afterClose(orderTabs(docs.map((d) => d.file), pinned), current, closing);
+    setDocs((list) => list.filter((d) => !closing.includes(d.file)));
+    setPinned((now) => new Set([...now].filter((f) => !closing.includes(f))));
+    if (after.current && after.current !== current) await openDocument(after.current);
   };
+  const closeDocument = (doc: Doc) => closeDocuments([doc.file]);
+  const shownDocs = orderTabs(docs.map((d) => d.file), pinned).map((f) => docs.find((d) => d.file === f)!);
+  const docMenu = (file: string) => tabMenu(file, { tabs: shownDocs.map((d) => d.file), pinned, dirty: (f) => f === model?.file && (actions.dirty || textDirty) }, {
+    close: (paths) => void closeDocuments(paths),
+    pin: (f, on) => setPinned((now) => { const next = new Set(now); if (on) next.add(f); else next.delete(f); return next; }),
+    reveal: () => (setRail("files"), toggle("l", false)),
+  }).map((item) => (shownDocs.length < 2 && typeof item === "object" && "run" in item && /^tab-(this|others|right|saved|all)$/.test(item.id)
+    ? { ...item, disabled: true, why: "The last model stays open" } : item));
 
   /** Write the class, then open it as a document; the Files rail picks it up from the new model. */
   const createNewClass = async (spec: NewClassSpec) => {
@@ -763,11 +779,15 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             >
               <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model)).then((name) => api.select([name]))} />
             </Rail>
+            <Gutter label="Simulate width" size={hidden.r ? 38 : simWidth} defaultSize={420} min={320} otherMin={420}
+              onSize={(w) => (setSimWidth(w), hidden.r && toggle("r", false))} onHidden={() => toggle("r", true)}>
             <div className="mid">
               <main className="panel stage" aria-label={model.name}>
                 <div className="ntabs">
                   <DocTabs
-                    docs={docs}
+                    docs={shownDocs}
+                    pinned={pinned}
+                    menu={docMenu}
                     active={model.file}
                     dirty={actions.dirty || textDirty}
                     onSelect={(doc) => void openDocument(doc.file)}
@@ -831,7 +851,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                 onCheck={() => void runCheck()}
               />
             </div>
-            <Panel name="Simulate" side="right" icon="play" width={420} hidden={hidden.r} onHidden={(h) => toggle("r", h)} className={`simside focus-${focus}`}
+            <Panel name="Simulate" side="right" icon="play" width={simWidth} hidden={hidden.r} onHidden={(h) => toggle("r", h)} className={`simside focus-${focus}`}
               head={<Segmented<Focus> label="Focus" value={focus} onChange={setFocus} options={[
                 { value: "code", label: "Source", hint: "The source fills the card" },
                 { value: "split", label: "Both", hint: "Source above, plots below" },
@@ -840,6 +860,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               <Split model={model} actions={actions} view={view} onView={setView} settings={settings.editor} appTheme={shown} />
               <Simulate actions={actions} model={model} onRunningChange={setRunning} onRun={(r) => setShapeRun(r.shapes?.length ? r : null)} />
             </Panel>
+            </Gutter>
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
             <InterfaceSheet open={sheet} onOpen={() => setSheet(true)} onClose={() => setSheet(false)} canExport={canExport} />
             {newClassOpen && <NewClassSheet workspace={workspace} model={model} defaultWithin={newClassWithin} onClose={() => setNewClassOpen(false)} onCreate={createNewClass} />}

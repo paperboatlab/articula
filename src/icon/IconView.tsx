@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { CORNER, DASH, FILL, FONT, STROKE, WEIGHT, type Corner, type Dash, type Fill, type IconDef, type IconPort, type Prim, type Pt, type Stroke, type Weight } from "@paperboatlab/ui/canvas";
+import { CELL, CORNER, DASH, FILL, FONT, STROKE, WEIGHT, type Corner, type Dash, type Fill, type IconDef, type IconPort, type Prim, type Pt, type Stroke, type Weight } from "@paperboatlab/ui/canvas";
 import { CompactBlock } from "@paperboatlab/ui/canvas";
 import { NumberField } from "@paperboatlab/ui";
 import { Segmented } from "@paperboatlab/ui";
@@ -362,6 +362,13 @@ export function IconView() {
     }
   };
 
+  // The stage has the plate's shape (the 0..100 grid stretches to it, as on the canvas): the long
+  // side is 100 units, X and Y take grid coordinates there.
+  const [iw, ih] = [CELL.w * (draft.w ?? 1) - 16, CELL.h * (draft.h ?? 1) - 16];
+  const [VW, VH] = [(100 * iw) / Math.max(iw, ih), (100 * ih) / Math.max(iw, ih)];
+  const X = (x: number) => +((x * VW) / 100).toFixed(2);
+  const Y = (y: number) => +((y * VH) / 100).toFixed(2);
+
   const drawPrim = (p: Prim, idx: number, ghost = false) => {
     const stroke = STROKE[p.stroke ?? "ink"];
     const strokeWidth = WEIGHT[p.weight ?? "normal"];
@@ -378,22 +385,22 @@ export function IconView() {
     const fill = FILL[p.fill ?? "none"];
     switch (p.t) {
       case "line":
-        return <polyline key={idx} {...common} fill="none" points={p.p.map(([x, y]) => `${x},${y}`).join(" ")} />;
+        return <polyline key={idx} {...common} fill="none" points={p.p.map(([x, y]) => `${X(x)},${Y(y)}`).join(" ")} />;
       case "poly":
-        return <polygon key={idx} {...common} fill={fill} points={p.p.map(([x, y]) => `${x},${y}`).join(" ")} />;
+        return <polygon key={idx} {...common} fill={fill} points={p.p.map(([x, y]) => `${X(x)},${Y(y)}`).join(" ")} />;
       case "rect":
-        return <rect key={idx} {...common} fill={fill} x={p.x} y={p.y} width={p.w} height={p.h} rx={CORNER[p.corner ?? "0"]} />;
+        return <rect key={idx} {...common} fill={fill} x={X(p.x)} y={Y(p.y)} width={X(p.w)} height={Y(p.h)} rx={CORNER[p.corner ?? "0"]} />;
       case "ellipse":
-        return <ellipse key={idx} {...common} fill={fill} cx={p.x + p.w / 2} cy={p.y + p.h / 2} rx={p.w / 2} ry={p.h / 2} />;
+        return <ellipse key={idx} {...common} fill={fill} cx={X(p.x + p.w / 2)} cy={Y(p.y + p.h / 2)} rx={X(p.w / 2)} ry={Y(p.h / 2)} />;
       case "arc": {
         const [cx, cy, rx, ry] = [p.x + p.w / 2, p.y + p.h / 2, p.w / 2, p.h / 2];
-        const at = (a: number) => `${+(cx + rx * Math.cos((a * Math.PI) / 180)).toFixed(2)},${+(cy - ry * Math.sin((a * Math.PI) / 180)).toFixed(2)}`;
+        const at = (a: number) => `${X(cx + rx * Math.cos((a * Math.PI) / 180))},${Y(cy - ry * Math.sin((a * Math.PI) / 180))}`;
         const sweep = (((p.a1 - p.a0) % 360) + 360) % 360;
-        return <path key={idx} {...common} fill={fill} d={`M${at(p.a0)}A${rx},${ry} 0 ${sweep > 180 ? 1 : 0} 0 ${at(p.a1)}`} />;
+        return <path key={idx} {...common} fill={fill} d={`M${at(p.a0)}A${X(rx)},${Y(ry)} 0 ${sweep > 180 ? 1 : 0} 0 ${at(p.a1)}`} />;
       }
       case "text":
         return (
-          <text key={idx} x={p.x} y={p.y} fill={stroke} textAnchor="middle" dominantBaseline="central" fontFamily={FONT[p.font ?? "sans"]} fontSize={p.size ?? 12} style={{ cursor: tool === "select" ? "move" : "crosshair", opacity: ghost ? 0.55 : 1, pointerEvents: ghost ? "none" : undefined }} onPointerDown={(e) => onShapeDown(e, idx)}>
+          <text key={idx} x={X(p.x)} y={Y(p.y)} fill={stroke} textAnchor="middle" dominantBaseline="central" fontFamily={FONT[p.font ?? "sans"]} fontSize={p.size ?? 12} style={{ cursor: tool === "select" ? "move" : "crosshair", opacity: ghost ? 0.55 : 1, pointerEvents: ghost ? "none" : undefined }} onPointerDown={(e) => onShapeDown(e, idx)}>
             {p.s}
           </text>
         );
@@ -455,7 +462,8 @@ export function IconView() {
           <svg
             ref={svgRef}
             className="icon-stage"
-            viewBox="0 0 100 100"
+            viewBox={`0 0 ${VW} ${VH}`}
+            style={{ ["--ar" as string]: iw / ih }}
             aria-label="Icon canvas, 0 to 100"
             onPointerDown={onCanvasDown}
             onPointerMove={onMove}
@@ -465,7 +473,7 @@ export function IconView() {
             {grid &&
               GRID_STEPS.flatMap((gx) =>
                 GRID_STEPS.map((gy) => (
-                  <circle key={`${gx}-${gy}`} className="studio-look-grid-dot" cx={gx} cy={gy} r={gx % 25 === 0 && gy % 25 === 0 ? 0.9 : 0.45} />
+                  <circle key={`${gx}-${gy}`} className="studio-look-grid-dot" cx={X(gx)} cy={Y(gy)} r={gx % 25 === 0 && gy % 25 === 0 ? 0.9 : 0.45} />
                 )),
               )}
             {draft.g.map((p, idx) => drawPrim(p, idx))}
@@ -476,8 +484,8 @@ export function IconView() {
                 <rect
                   key={port.id}
                   className={`icon-port${selectedPort === port.id ? " on" : ""}`}
-                  x={x - 2.4}
-                  y={y - 2.4}
+                  x={X(x) - 2.4}
+                  y={Y(y) - 2.4}
                   width={4.8}
                   height={4.8}
                   onPointerDown={(e) => {
@@ -491,14 +499,14 @@ export function IconView() {
                 </rect>
               );
             })}
-            {box && <rect className="studio-look-sel-box" x={box.x} y={box.y} width={box.w} height={box.h} />}
+            {box && <rect className="studio-look-sel-box" x={X(box.x)} y={Y(box.y)} width={X(box.w)} height={Y(box.h)} />}
             {box &&
               selectedPrim &&
               (selectedPrim.t === "rect" || selectedPrim.t === "ellipse" || selectedPrim.t === "arc") &&
               HANDLES.map((corner) => {
                 const hx = corner.includes("w") ? box.x : box.x + box.w;
                 const hy = corner.includes("n") ? box.y : box.y + box.h;
-                return <rect key={corner} className="icon-handle" x={hx - 1.8} y={hy - 1.8} width={3.6} height={3.6} onPointerDown={(e) => onHandleDown(e, selected, corner)} />;
+                return <rect key={corner} className="icon-handle" x={X(hx) - 1.8} y={Y(hy) - 1.8} width={3.6} height={3.6} onPointerDown={(e) => onHandleDown(e, selected, corner)} />;
               })}
           </svg>
           <span className="icon-hint">

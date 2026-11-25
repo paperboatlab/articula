@@ -72,12 +72,22 @@ test("look: every primitive kind, move, token edit, plate size and port placemen
   };
   assert.equal(iconValid(icon), true, "valid after token and position edits");
 
-  // Plate sizes: 1x1, 2x1, 1x2 only
+  // Plate sizes: 1x1, 1x2 (one row, wide), 2x1 (tall) only
   for (const sz of PLATE_SIZES) {
     const sized = applyPlateSize(icon, sz);
     assert.equal(plateSizeKey(sized), sz);
     assert.equal(iconValid(sized), true, `valid plate size ${sz}`);
   }
+  assert.deepEqual([applyPlateSize(icon, "1x2").w, applyPlateSize(icon, "1x2").h], [2, 1], "1x2 is one row of two");
+
+  // A circle keeps its shape on a wide plate (squeezed on the grid, round on screen), and comes back
+  const circle: IconDef = { g: [{ t: "ellipse", x: 0, y: 0, w: 100, h: 100 }] };
+  const wide = applyPlateSize(circle, "1x2");
+  const e = wide.g[0] as Extract<Prim, { t: "ellipse" }>;
+  assert.equal(e.h, 100);
+  assert.ok(Math.abs((e.w * 112) / (e.h * 40) - 48 / 40) < 0.1, `round on screen: ${e.w}`);
+  const back = applyPlateSize(wide, "1x1").g[0] as Extract<Prim, { t: "ellipse" }>;
+  assert.ok(back.x <= 5 && back.w >= 90 && back.h === 100, "and back, within the grid's rounding");
 
   // 2x2 is sanitized back to 1x1
   const bad2x2 = sanitizeIconDef({ ...icon, w: 2, h: 2 }, api.model.entries);

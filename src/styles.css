@@ -44,7 +44,6 @@ body { background: var(--surface-ground); color: var(--text); font: 13px/1.45 va
 
 
 /* the runtimes key and its peek (as Julix's) */
-.popw { position: relative; }
 .key.rtk { position: relative; border-radius: var(--radius-md); }
 .rtk .badge { position: absolute; top: -6px; right: -7px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--surface-raised); border: 1px solid var(--accent-select); font: 600 10px/14px var(--font-mono); color: var(--accent-text); text-align: center; }
 .rtk .badge.bad { border-color: var(--danger); color: var(--danger); }
@@ -66,9 +65,25 @@ body { background: var(--surface-ground); color: var(--text); font: 13px/1.45 va
 .well.ask { display: flex; flex-direction: column-reverse; gap: 4px; padding: 8px 10px; }
 .well.ask input { all: unset; font: 13px var(--font-sans); color: var(--text); }
 .well.ask em { font: normal 11px var(--font-sans); color: var(--text-muted); }
-.about { display: grid; grid-template-columns: 64px 1fr; gap: 18px; align-items: start; }
-.about dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 12.5px; }
-.about dt { color: var(--text-muted); } .about dd { margin: 0; }
+/* About (ui-example §10) */
+.about-win { gap: 14px; }
+.abtop { display: flex; gap: 20px; align-items: center; }
+.abname { display: flex; flex-direction: column; gap: 6px; }
+.wm.big { font: 400 28px var(--font-display); letter-spacing: -0.01em; line-height: 1; white-space: nowrap; }
+.wm.big b { font-weight: 600; } .wm .um { color: var(--text-muted); }
+.abname > small { font-size: 12.5px; color: var(--text-muted); }
+.abver { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: 13px; }
+.abver span { color: var(--text-muted); }
+.abver code { flex-basis: 100%; font: 11.5px var(--font-mono); color: var(--text-muted); }
+.abkeys { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.abmade { font-size: 12.5px; color: var(--text-muted); padding: 10px 12px; background: var(--surface-sunken); border-radius: var(--radius-md); }
+.abmade b { color: var(--text); font-weight: 500; }
+.abmade a, .abtab a { color: var(--accent-text); text-decoration: none; }
+.abg { font: 500 10.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); padding: 10px 0 4px; }
+.abtab { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.abtab td { padding: 5px 8px; border-bottom: 1px solid var(--line); }
+.abtab .mu { color: var(--text-muted); } .abtab code { font: 11px var(--font-mono); white-space: nowrap; }
+.abfoot { font-size: 11.5px; color: var(--text-muted); }
 .lib-quick-list { display: grid; gap: 4px; margin-bottom: 12px; }
 .lib-quick-item { all: unset; display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; border-radius: var(--radius-md); cursor: pointer; }
 .lib-quick-item:hover { background: var(--surface-sunken); }
@@ -97,7 +112,7 @@ body { background: var(--surface-ground); color: var(--text); font: 13px/1.45 va
 .icon-count { font: 400 11px var(--font-mono); color: var(--text-muted); }
 .icon-view-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 8px; padding: 8px; }
 .icon-canvas { position: relative; min-height: 0; display: grid; place-items: center; background: var(--surface-sunken); border: 1px solid var(--line-strong); border-radius: var(--radius-md); overflow: hidden; }
-.icon-stage { width: min(72vh, 100%); aspect-ratio: 1; background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); cursor: crosshair; touch-action: none; user-select: none; }
+.icon-stage { width: min(100%, calc(72vh * var(--ar, 1))); aspect-ratio: var(--ar, 1); background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); cursor: crosshair; touch-action: none; user-select: none; }
 .icon-canvas.select .icon-stage { cursor: default; }
 .icon-stage .studio-look-grid-dot { fill: var(--dots); }
 .icon-stage .studio-look-sel-box { fill: none; stroke: var(--line-ink); stroke-width: 0.8; stroke-dasharray: 2 2; pointer-events: none; }
@@ -653,7 +668,6 @@ body.dragging-card .library {
 .sim-setup { display: flex; align-items: center; gap: 8px; padding: 8px 10px; flex: none; }
 .sim-stop { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; font: 12px var(--font-mono); color: var(--text-muted); }
 .sim-stop input { all: unset; width: 48px; font: 12.5px var(--font-mono); color: var(--text); text-align: right; }
-.sim-setup .popw > :not(.key) { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; }
 .sim-status { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font: 11.5px var(--font-mono); color: var(--text-muted); }
 .sim-status.bad, .sim-note.bad { color: var(--danger); }
 .sim-note { margin: 0; padding: 2px 12px 6px; font-size: 12px; color: var(--text-muted); white-space: pre-wrap; }
@@ -685,3 +699,44 @@ body.dragging-card .library {
 .rail .library { flex: 1; min-height: 0; flex-direction: column; border: 0; border-radius: 0; background: none; }
 .rail .lib-tree-col { width: auto; flex: 1 1 50%; min-height: 0; }
 .rail .lib-cards-col { width: auto; flex: 1 1 50%; min-height: 0; border-left: 0; border-top: 1px solid var(--line); }
+
+/* Solver settings (SolverSettings.tsx): solvers by family on the left, the chosen one's options right */
+.dialog.solver-settings { width: min(780px, 94vw); }
+.solver-body { display: grid; grid-template-columns: minmax(220px, 270px) 1fr; gap: 18px; min-height: 0; }
+.solver-list { display: flex; flex-direction: column; gap: 12px; padding-right: 14px; border-right: 1px solid var(--line); }
+.solver-intro, .solver-about { margin: 0; font-size: 12px; color: var(--text-muted); }
+.solver-about b { color: var(--text); font-weight: 600; }
+.solver-family { display: flex; flex-direction: column; gap: 2px; }
+.solver-family h3 { margin: 0 0 4px; font: 500 10.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.solver-pick { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 6px 8px; text-align: left; font: inherit; color: var(--text); background: transparent; border: 0; border-radius: var(--radius-md); cursor: pointer; }
+.solver-pick:hover { background: var(--surface-sunken); }
+.solver-pick.on { background: color-mix(in srgb, var(--accent) var(--tint), transparent); }
+.solver-pick:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.solver-name { display: flex; gap: 6px; align-items: baseline; font-size: 12.5px; font-weight: 500; }
+.solver-pick.on .solver-name { color: var(--accent-text); font-weight: 600; }
+.solver-badge { font: 10.5px var(--font-mono); color: var(--text-muted); }
+.solver-blurb { font-size: 11.5px; color: var(--text-muted); }
+.solver-options { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.solver-group { margin: 0; padding: 8px 0 0; border: 0; border-top: 1px solid var(--line); display: grid; gap: 10px; }
+.solver-group legend { padding: 0 8px 0 0; font: 500 10.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.solver-field { display: grid; grid-template-columns: 1fr 110px 58px; align-items: center; gap: 8px; }
+.solver-row { display: contents; }
+.solver-label { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
+.solver-unit, .solver-hint { color: var(--text-muted); }
+.solver-hint { font-size: 11.5px; }
+.solver-field.changed .solver-label > span:first-child { font-weight: 600; }
+.solver-field .well { width: 100%; height: 26px; }
+.solver-undo:disabled { visibility: hidden; }
+
+/* The 3D view's Home key (viewCube.ts): a round key with the house in line (REBRAND: 1px, square caps) */
+.key.view-cube-home { width: 26px; height: 26px; padding: 0; display: grid; place-items: center; border-radius: var(--radius-round); color: var(--text); transition: color var(--motion), border-color var(--motion), opacity var(--motion); }
+.view-cube-home svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1; stroke-linecap: square; }
+.key.view-cube-home.compact { width: 20px; height: 20px; }
+.view-cube-home.compact svg { width: 12px; height: 12px; }
+.view-cube-home.at-home { color: var(--text-muted); border-color: var(--line); }
+
+/* A tab whose menu is open stays tinted (REBRAND "Tab menu"); a pinned tab shows its pin for the × */
+.tabs2 > span.menu { color: var(--text); background: color-mix(in srgb, var(--accent) var(--tint), transparent); border-radius: var(--radius-md) var(--radius-md) 0 0; }
+.tabs2 .tx.pin { cursor: default; }
+.tabs2 .tx.pin:hover { background: none; }
+.tabs2 .tx.pin .pb-icon { width: 12px; height: 12px; }

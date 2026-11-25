@@ -231,15 +231,13 @@ export function Simulate({
     <section className="simulate" aria-label="Simulate">
       <div className="sim-setup" role="toolbar" aria-label="Simulation setup">
         <label className="well sim-stop" title="Stop time"><span>stop</span><input value={stop} inputMode="decimal" aria-label="Stop time" onChange={(e) => setStop(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void go()} /><span>s</span></label>
-        <span className="popw">
-          <Key size="sm" title="Solver settings" aria-expanded={solverOpen} onClick={() => setSolverOpen(!solverOpen)}>{summary(solver)}</Key>
+        <Key size="sm" title="Solver settings" aria-haspopup="dialog" onClick={() => setSolverOpen(true)}>{summary(solver)}</Key>
           {solverOpen && (
             <SolverSettings intro="omc's integrator for this model; kept with the model." solvers={SOLVERS} options={OPTIONS} solver={solver.method}
               values={{ tolerance: solver.tolerance, intervals: solver.intervals, start: solver.start }} defaults={DEFAULTS}
               onSolver={(method) => setSolver({ ...solver, method })} onOption={(k, v) => setSolver({ ...solver, [k]: v })}
               onReset={() => setSolver({ method: "dassl" })} onClose={() => setSolverOpen(false)} />
           )}
-        </span>
         <span className={`sim-status${phase.state === "failed" ? " bad" : ""}`} role="status">{phase.state === "running" && <Spinner size={12} />}{status}</span>
       </div>
       <Stimuli inputs={inputs} value={stimuli} onChange={setStimuli} />

@@ -50,7 +50,7 @@ export function CanvasHelp({ gestures = CANVAS_GESTURES }: { gestures?: [string,
         </section>
       )}
       <button
-        className={`key small help-key${open ? " on" : ""}`}
+        className={`key sm help-key${open ? " on" : ""}`}
         aria-expanded={open}
         title="What the canvas does (?)"
         onClick={() => setOpen(!open)}

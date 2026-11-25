@@ -1,10 +1,9 @@
-// The solver settings dialog shared by Paperboat (Run ▸ Solver settings…) and Squero Studio's
-// Simulate run: the solvers grouped by what they're for, the chosen one's options grouped by
-// what they change, each option's default shown and resettable. Each app says which solvers
-// and options it has; the dialog knows none.
+// Simulate's solver settings, on the kit's Dialog: the solvers grouped by what they're for, the chosen
+// one's options grouped by what they change, each option's default shown and resettable. The caller
+// says which solvers and options there are; the dialog knows none.
 
 import { useRef, useEffect } from "react";
-import { NumberField, useDismiss } from "@paperboatlab/ui";
+import { Dialog, Key, NumberField } from "@paperboatlab/ui";
 
 export type SolverFamily = "explicit" | "adaptive" | "implicit" | "discrete";
 
@@ -72,29 +71,16 @@ export function SolverSettings({
   onReset: () => void;
   onClose: () => void;
 }) {
-  const root = useRef<HTMLElement>(null);
+  const root = useRef<HTMLDivElement>(null);
   useEffect(() => root.current?.querySelector<HTMLElement>("[aria-checked=true]")?.focus(), []);
-  useDismiss(root, onClose);
   const chosen = solvers.find((s) => s.id === solver) ?? solvers[0];
   const shown = (chosen?.options ?? []).map((k) => options.find((o) => o.key === k)).filter((o): o is SolverOptionInfo => !!o);
   const groups = [...new Set(shown.map((o) => o.group))];
 
   return (
-    <section
-      className="console-window solver-settings"
-      role="dialog"
-      aria-label={title}
-      data-own-keys
-      ref={root}
-    >
-      <header className="console-head">
-        <h2>{title}</h2>
-        <span className="spacer" />
-        <button className="key small" onClick={onClose} aria-label="Close">
-          ✕
-        </button>
-      </header>
-      <div className="solver-body">
+    <Dialog title={title} wide className="solver-settings" onClose={onClose}
+      actions={<><Key onClick={onReset}>Defaults</Key><Key kind="primary" onClick={onClose}>Done</Key></>}>
+      <div className="solver-body" ref={root}>
         <div className="solver-list" role="radiogroup" aria-label="Solver">
           {intro && <p className="solver-intro">{intro}</p>}
           {ORDER.filter((f) => solvers.some((s) => s.family === f)).map((f) => (
@@ -157,23 +143,15 @@ export function SolverSettings({
                         </span>
                       </span>
                       <NumberField
-                        className="num well"
+                        className="well"
                         aria-label={o.label}
                         value={value}
                         valid={(v) => o.valid(v) && (!o.whole || Number.isInteger(v))}
                         onChange={(v) => onOption(o.key, v)}
                       />
                       </label>
-                      <button
-                        type="button"
-                        className="key small solver-undo"
-                        title={`Back to the default (${defaults[o.key] ?? 0})`}
-                        aria-label={`Reset ${o.label}`}
-                        disabled={own === undefined}
-                        onClick={() => onOption(o.key, undefined)}
-                      >
-                        ↺
-                      </button>
+                      <Key size="sm" kind="quiet" className="solver-undo" title={`Back to the default (${defaults[o.key] ?? 0})`}
+                        disabled={own === undefined} onClick={() => onOption(o.key, undefined)}>Reset</Key>
                     </div>
                   );
                 })}
@@ -181,14 +159,6 @@ export function SolverSettings({
           ))}
         </div>
       </div>
-      <footer className="solver-foot">
-        <button type="button" className="key" onClick={onReset}>
-          Defaults
-        </button>
-        <button type="button" className="key primary" onClick={onClose}>
-          Done
-        </button>
-      </footer>
-    </section>
+    </Dialog>
   );
 }

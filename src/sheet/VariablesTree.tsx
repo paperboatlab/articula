@@ -284,7 +284,7 @@ export function VariablesTree({ model, mode }: { model: StudioModel; mode: Mode 
         {mode === "edit" && (
           <button
             type="button"
-            className="key small"
+            className="key sm"
             onClick={() => {
               const taken = new Set([...model.params.map((p) => p.id), ...model.components.map((c) => c.name)]);
               let n = 1;

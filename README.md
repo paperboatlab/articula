@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/banner-dark.gif">
-    <img src=".github/readme/banner-light.gif" width="382" alt="Paperboat Articula">
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/banner-dark.webp">
+    <img src=".github/readme/banner-light.webp" width="382" alt="Paperboat Articula">
   </picture>
 </h1>
 

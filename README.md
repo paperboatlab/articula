@@ -1,4 +1,9 @@
-# Paperboat Articula
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/banner-dark.gif">
+    <img src=".github/readme/banner-light.gif" width="382" alt="Paperboat Articula">
+  </picture>
+</h1>
 
 Acausal physical modelling: an OpenModelica editor (a C++ `omc` server and a web UI) that exports Simplicial stations. Part of [Paperboat](https://github.com/paperboatlab/paperboat).
 

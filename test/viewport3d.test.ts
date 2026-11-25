@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sampleAt, shapeMatrix, type Shape } from "../src/viewport3d/shapes.ts";
+import { bounds, entityMatrix, sampleAt, shapeMatrix, type Shape, type Value } from "../src/viewport3d/shapes.ts";
 
 const box: Shape = {
   ident: "b", type: "box",
@@ -23,4 +23,21 @@ test("sampleAt finds the sample at or before a time", () => {
   assert.equal(sampleAt(t, 0), 0);
   assert.equal(sampleAt(t, 0.7), 1);
   assert.equal(sampleAt(t, 9), 3);
+});
+
+test("entityMatrix puts the kit's centred unit where shapeMatrix's unit is", () => {
+  const at = (v: Value) => (typeof v === "number" ? v : 3);
+  const tf = (m: number[], p: number[]) => [0, 1, 2].map((k) => Math.round((m[k] * p[0] + m[4 + k] * p[1] + m[8 + k] * p[2] + m[12 + k]) * 1e9) / 1e9 + 0);
+  const ref = shapeMatrix(box, at);
+  // a box's centre is the unit's (0.5, 0, 0)
+  assert.deepEqual(tf(entityMatrix(box, at), [0, 0, 0]), tf(ref, [0.5, 0, 0]));
+  // a cone's tip (+y, half its length up) is the far end of the length
+  const cone = { ...box, type: "cone" };
+  assert.deepEqual(tf(entityMatrix(cone, at), [0, 0.5, 0]), tf(ref, [1, 0, 0]));
+  assert.deepEqual(tf(entityMatrix(cone, at), [0, -0.5, 0]), tf(ref, [0, 0, 0]));
+});
+
+test("bounds holds every corner of the shapes", () => {
+  const [lo, hi] = bounds([box], (v) => (typeof v === "number" ? v : 3));
+  assert.deepEqual([lo, hi].map((v) => v.map((n) => Math.round(n * 1e9) / 1e9 + 0)), [[2.9, 0.1, -0.05], [3.1, 0.6, 0.05]]);
 });

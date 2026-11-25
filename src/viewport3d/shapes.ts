@@ -58,3 +58,44 @@ export function sampleAt(t: number[], time: number): number {
   }
   return lo;
 }
+
+/**
+ * shapeMatrix for the kit's stage (`@paperboatlab/ui/stage`), whose unit shapes are centred on the origin, a cylinder or
+ * cone along y: shift by half the length, and turn y onto x for the round ones. Pairs with `kitShape`.
+ */
+export function entityMatrix(s: Shape, at: (v: Value) => number): number[] {
+  const m = shapeMatrix(s, at);
+  const [X, Y, Z, P] = [m.slice(0, 3), m.slice(4, 7), m.slice(8, 11), m.slice(12, 15)];
+  const p = [P[0] + X[0] / 2, P[1] + X[1] / 2, P[2] + X[2] / 2];
+  // Rz(-90°): the unit's +y (a cone's tip) goes along the length (X), its x along -Y
+  const round = kitShape(s.type) === "cylinder" || kitShape(s.type) === "cone";
+  const cols = round ? [Y.map((n) => -n), X, Z] : [X, Y, Z];
+  return [...cols[0], 0, ...cols[1], 0, ...cols[2], 0, ...p, 1];
+}
+
+/** The kit shape that draws an omc one; KIT_SIZE sizes it to shapeMatrix's unit (length 1, width 1). */
+export function kitShape(type: string): "box" | "sphere" | "cylinder" | "cone" {
+  if (type === "sphere") return "sphere";
+  if (type === "cone") return "cone";
+  if (type === "cylinder" || type === "pipecylinder" || type === "pipe" || type === "gearwheel" || type === "spring") return "cylinder";
+  // ponytail: beam and file:// CAD parts draw as their box; load meshes when CAD import lands (#44 §4)
+  return "box";
+}
+
+export const KIT_SIZE = { box: [1, 1, 1], sphere: [0.5, 0.5, 0.5], cylinder: [0.5, 1, 0.5], cone: [0.5, 1, 0.5] } as const;
+
+/** The world box [min, max] around the shapes at sample `at`: the unit's eight corners through shapeMatrix. */
+export function bounds(shapes: Shape[], at: (v: Value) => number): [Vec, Vec] {
+  const lo: Vec = [Infinity, Infinity, Infinity];
+  const hi: Vec = [-Infinity, -Infinity, -Infinity];
+  for (const s of shapes) {
+    const m = shapeMatrix(s, at);
+    for (const x of [0, 1]) for (const y of [-0.5, 0.5]) for (const z of [-0.5, 0.5])
+      for (let k = 0; k < 3; k++) {
+        const w = m[k] * x + m[4 + k] * y + m[8 + k] * z + m[12 + k];
+        lo[k] = Math.min(lo[k], w);
+        hi[k] = Math.max(hi[k], w);
+      }
+  }
+  return shapes.length ? [lo, hi] : [[0, 0, 0], [0, 0, 0]];
+}

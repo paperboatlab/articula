@@ -36,6 +36,8 @@ npm ci && npm run build && npm run build:server
 paperboat app install articula --from .
 ```
 
+Pushing a tag `v<version>` (package.json's) publishes the release `app install` downloads (Linux x86_64).
+
 ## Run
 
 ```sh

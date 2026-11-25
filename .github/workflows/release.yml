@@ -1,0 +1,43 @@
+name: release
+
+# A tag v<version> publishes articula-<version>.tar.gz (one top folder: bin/, dist/, examples/), the
+# asset `paperboat app install articula` unpacks.
+# ponytail: Linux x86_64 only (built on glibc 2.39, libstdc++ static): the CLI asks for one asset name;
+# per-OS/arch assets when it picks by platform.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  tarball:
+    runs-on: ubuntu-24.04
+    env:
+      CXX: g++-14
+      CC: gcc-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci && npm run build
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build
+      - run: |
+          cmake -S server -B server/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DARTICULA_BUILD_TESTS=OFF \
+            -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+          cmake --build server/build --target articula-server
+      - name: Pack
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          [ "$v" = "$(node -p 'require("./package.json").version')" ] || { echo "tag $GITHUB_REF_NAME isn't package.json's version"; exit 1; }
+          top=articula-$v
+          mkdir -p $top/bin
+          cp bin/articula server/build/articula-server $top/bin/
+          cp -r dist examples LICENSE README.md $top/
+          tar -czf $top.tar.gz $top
+          echo "TARBALL=$top.tar.gz" >> $GITHUB_ENV
+      - run: gh release create "$GITHUB_REF_NAME" "$TARBALL" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

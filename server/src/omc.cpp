@@ -244,6 +244,9 @@ struct Omc::Impl {
       const int in = ::open("/dev/null", O_RDONLY);
       if (in >= 0) dup2(in, 0);
       if (out >= 0) dup2(out, 1), dup2(out, 2);
+      // nothing else of the server's: paperboatd (and the conmon it starts) outlive the server and
+      // would hold its listening port
+      close_range(3, ~0U, 0);
       execl(d.c_str(), d.c_str(), "--socket", sock.c_str(), static_cast<char*>(nullptr));
       _exit(127);
     }

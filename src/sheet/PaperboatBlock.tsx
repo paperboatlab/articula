@@ -4,8 +4,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { CompactBlock, NumberField } from "@paperboat/shared/components";
-import type { IconPort } from "@paperboat/shared";
+import { CompactBlock } from "@paperboatlab/ui/canvas";
+import { NumberField } from "@paperboatlab/ui";
+import { type IconPort } from "@paperboatlab/ui/canvas";
 import { useStudio } from "../model/types.ts";
 import { buildPaperboatBlockDef, snapTo5, syncPortsWithEntries } from "./look.ts";
 import { SideSelect } from "./SideSelect.tsx";

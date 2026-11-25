@@ -1,8 +1,8 @@
 // The component browser: a package tree, and the cards of the chosen package (or of a search)
 // in a column beside it: vector thumbnails, docstrings, connector summaries, drag-and-drop.
 
-import { Icon } from "@paperboat/shared/components";
-import type { IconDef, IconPort } from "@paperboat/shared";
+import { BlockIcon } from "@paperboatlab/ui/canvas";
+import { type IconDef, type IconPort } from "@paperboatlab/ui/canvas";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import type { OmcClient } from "../omc/omc.ts";
 import { atom, list, parseValue } from "../omc/parse.ts";
@@ -75,7 +75,7 @@ export function Thumb({
 
   return (
     <span className="thumb" ref={box}>
-      {icon ? <Icon icon={icon} type={cls} fill={(t) => (t.includes("{") ? "" : t)} /> : null}
+      {icon ? <BlockIcon icon={icon} type={cls} fill={(t) => (t.includes("{") ? "" : t)} /> : null}
     </span>
   );
 }

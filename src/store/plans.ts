@@ -1,7 +1,7 @@
 // What each StudioApi action sends to omc, as plain data: the expressions, or the words why not.
 // The hook in index.tsx only runs them; a test can read them here.
 
-import type { IconDef } from "@paperboat/shared";
+import { type IconDef } from "@paperboatlab/ui/canvas";
 import type { Connection, StudioModel } from "../model/types.ts";
 import * as x from "./exprs.ts";
 import { endOf, hasWire, split, wireError } from "./wires.ts";

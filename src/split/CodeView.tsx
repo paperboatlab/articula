@@ -2,10 +2,10 @@
 // follows the user's editor theme and font, with Modelica or C++ highlighting.
 import { StreamLanguage } from "@codemirror/language";
 import { cpp } from "@codemirror/legacy-modes/mode/clike";
-import { CodeEditor, type EditorSettings } from "@paperboat/shared/editor";
-import { modelica } from "./modelica.ts";
+import { Editor as CodeEditor, modelica, type EditorSettings, type Language } from "@paperboatlab/ui/editor";
 
-const LANGUAGES = { mo: modelica, cpp: StreamLanguage.define(cpp) };
+const CPP: Language = { id: "cpp", label: "C++", extensions: ["cpp", "hpp"], grammar: () => StreamLanguage.define(cpp) };
+const LANGUAGES = { mo: modelica, cpp: CPP };
 
 export function CodeView({ code, lang, ariaLabel, settings, appTheme }: {
   code: string;

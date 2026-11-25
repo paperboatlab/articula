@@ -1,8 +1,8 @@
 // OM's side of the shared Help window: its manual and Paperboat's (paperboatlab.github.io), the
 // canvas gestures, and every Modelica class omc has loaded, with its documentation annotation
 // (Documentation(info=…)).
-import { CANVAS_GESTURES } from "@paperboat/shared/components";
-import { combineHelp, docsHelp, DOCS_URL, loadDocs, matches, type HelpItem, type HelpPage, type HelpProvider } from "@paperboat/shared";
+import { CANVAS_GESTURES } from "@paperboatlab/ui/canvas";
+import { combineHelp, docsHelp, DOCS_URL, loadDocs, matches, type HelpItem, type HelpPage, type HelpProvider } from "@paperboatlab/ui";
 import { atom, list, parseValue } from "../omc/parse.ts";
 import type { OmcCalls } from "../omc/omc.ts";
 import { flat, search } from "../library/classes.ts";
@@ -20,10 +20,10 @@ Type a class name (\`Resistor\`) or a full path (\`Modelica.Blocks.Continuous.PI
   },
 ];
 
-/** The org's docs site; VITE_DOCS_URL points Help at another build (a local one, to try docs out). */
-const DOCS: string = import.meta.env?.VITE_DOCS_URL ?? DOCS_URL;
+/** The org's docs site. */
+const DOCS: string = DOCS_URL;
 /** OM's manual and the engine's, fetched on Help's first look. */
-const omDocs = () => docsHelp(() => loadDocs((s) => s.site === "apps/squero-studio-om" || s.site === "paperboat", DOCS), DOCS);
+const omDocs = () => docsHelp(() => loadDocs((s) => s.site === "apps/articula" || s.site === "paperboat", DOCS), DOCS);
 
 const CLASS = "class:";
 const NAME = /^[A-Za-z_][\w]*(\.[A-Za-z_][\w]*)*$/;

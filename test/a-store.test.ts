@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Ground, Resistor, connectors } from "@paperboat/shared/fixtures/icons";
+import { Ground, Resistor, connectors } from "./fixtures/icons.ts";
 import type { ComponentInst, StudioModel } from "../src/model/types.ts";
 import type { OmcCalls } from "../src/omc/omc.ts";
 import { chip } from "../src/omc/omc.ts";

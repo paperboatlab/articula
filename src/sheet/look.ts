@@ -1,23 +1,4 @@
-import {
-  CORNER,
-  DASH,
-  FILL,
-  FONT,
-  iconValid,
-  SIZE,
-  STROKE,
-  WEIGHT,
-  type BlockDef,
-  type Corner,
-  type Dash,
-  type Fill,
-  type IconDef,
-  type IconPort,
-  type Prim,
-  type Pt,
-  type Stroke,
-  type Weight,
-} from "@paperboat/shared";
+import { CORNER, DASH, FILL, FONT, iconValid, SIZE, STROKE, WEIGHT, type BlockDef, type Corner, type Dash, type Fill, type IconDef, type IconPort, type Prim, type Pt, type Stroke, type Weight } from "@paperboatlab/ui/canvas";
 import type { EntryPoint, StudioModel } from "../model/types.ts";
 
 export type PlateSizeKey = "1x1" | "2x1" | "1x2";

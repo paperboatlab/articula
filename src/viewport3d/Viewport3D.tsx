@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { viewCube } from "@paperboat/shared/viewCube";
+import { viewCube } from "./viewCube.ts";
 import { sampleAt, shapeMatrix, type Shape, type Value } from "./shapes.ts";
 
 export type ShapeRun = { t: number[]; series: Record<string, (number | null)[]>; shapes?: Shape[] };

@@ -1,4 +1,4 @@
-import type { ConnectorDef, IconPort } from "@paperboat/shared";
+import { type ConnectorDef, type IconPort } from "@paperboatlab/ui/canvas";
 import type {
   ComponentInst,
   ExportMode,

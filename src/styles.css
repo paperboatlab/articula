@@ -1,68 +1,79 @@
-/* Squero Studio: OpenModelica. The same flat-mono look as Paperboat, tokens, plates and ports from
-   @paperboat/shared (tokens.css, plates.css); only Studio's own rules are below. */
-@import "@paperboat/shared/tokens.css";
-@import "@paperboat/shared/plates.css";
-@import "@paperboat/shared/files.css";
-@import "@paperboat/shared/packages.css";
-@import "@paperboat/shared/squero.css";
-@import "@paperboat/shared/editor.css";
+/* Articula's own styles: what the kit (@paperboatlab/ui ui.css) doesn't draw. The window is Julix's and
+   Malachite's (agent-docs/rebrand): the bar, then card panels. Roles and component tokens only. */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--surface-ground); color: var(--text); font: 13px/1.45 var(--font-sans); }
+.muted { color: var(--text-muted); } .mono { font-family: var(--font-mono); }
 
-/* ---- Studio ------------------------------------------------------------------------ */
-.studio { --side-w: 0px; height: 100%; display: grid; gap: var(--gutter); padding: var(--gutter); grid-template-columns: auto minmax(0, 1fr) var(--side-w) auto; grid-template-rows: var(--bar-height) minmax(0, 1fr) auto; grid-template-areas: "bar bar bar bar" "library canvas side sheet" "dock dock dock dock"; background: var(--surface-ground); transition: grid-template-columns var(--slide); }
-.studio.with-side { --side-w: clamp(320px, 30vw, 440px); }
-/* The side pane slides in and out: its column grows from 0 (the gap it leaves is taken back). */
-.studio > .side { overflow: hidden; margin-left: calc(var(--gutter) * -1); opacity: 0; pointer-events: none; transition: opacity var(--slide), margin var(--slide); }
-.studio.with-side > .side { margin-left: 0; opacity: 1; pointer-events: auto; }
-.side > * { min-width: 320px; }
-.studio > .bar { grid-area: bar; }
-.studio > .library { grid-area: library; }
-.studio > .stage { grid-area: canvas; }
-/* The stage (#62): view tabs over the model's active view; the run dock floats over it. */
-.stage { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
+/* ---- the window: the bar on top, then Files | (the model over the Console) | Simulate ---- */
+.win { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 52px minmax(0, 1fr); gap: var(--gutter); padding: var(--gutter); }
+.bar { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 0 10px 0 12px; background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.bar .wm { font: 600 17px var(--font-display); letter-spacing: -0.01em; }
+.bar .proj { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font: 13px var(--font-mono); max-width: 280px; overflow: hidden; white-space: nowrap; }
+.bar .proj .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
+.bend { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.lsep { width: 1px; height: 18px; background: var(--line); }
+.ws { min-height: 0; display: flex; gap: var(--gutter); }
+.mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--gutter); }
+.panel-head .tools { display: flex; gap: 2px; margin-left: auto; }
+.panel-head .tabs { margin-right: auto; }
+
+/* the left card: Files | Library; a class row shows its kind as a letter */
+.rail .rail-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.rail .rail-body[hidden] { display: none; }
+.ck { width: 14px; height: 14px; flex: none; display: inline-grid; place-items: center; border-radius: 3px; font: 600 9.5px/1 var(--font-mono); color: var(--accent-text); border: 1px solid var(--accent-select); }
+.ck.pkg { border: 0; color: var(--text-muted); }
+.library-slot { flex: 1; min-width: 0; display: flex; }
+
+/* the middle card: the open models' tabs and the view switch, over the active view */
+.panel.stage { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.ntabs { display: flex; align-items: center; gap: 12px; padding: 0 8px 0 6px; border-bottom: 1px solid var(--line); height: 40px; flex: none; }
+.ntabs .docbar { flex: 1; min-width: 0; border-bottom: 0; align-self: stretch; }
 .stage-view { position: relative; flex: 1; min-height: 0; display: flex; }
 .stage-pane { flex: 1; min-width: 0; display: flex; }
 .stage-pane[hidden] { display: none; }
 .stage-pane > .canvas { flex: 1; }
-.stage-empty { flex: 1; display: grid; place-items: center; margin: 0; color: var(--text-muted); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-raised); }
-.studio > .side { grid-area: side; }
-.studio > .dock-slot { grid-area: dock; }
-/* The opening wait: the shared WaitScreen (plates.css), across the panels it will fill. */
-.studio > .wait-screen { grid-area: library / library / canvas / side; }
-@media (prefers-reduced-motion: reduce) { .studio, .studio > .side { transition: none; } .split, .simulate { transition: none; } }
+.stage-empty { flex: 1; display: grid; place-items: center; margin: 0; color: var(--text-muted); }
+.stage-view > .dock-slot { position: absolute; left: 0; right: 0; bottom: 12px; display: flex; justify-content: center; pointer-events: none; }
+.stage-view > .dock-slot > * { pointer-events: auto; }
+.studio.no-dock .dock-slot { display: none; }
 
-.bar {
-  grid-column: 1 / -1;
-  height: var(--bar-height);
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: 0 var(--space-4);
-  min-width: 0;
-  position: relative;
-  background: var(--surface-panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-}
+/* the bottom card: Console | Messages */
+.cons .cons-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.cons .cons-body > * { flex: 1; min-height: 0; }
 
+/* the right card: the source over Simulate's plots */
+.panel.side { display: flex; flex-direction: column; overflow: hidden; }
 
-/* ---- The rail (#43): Files | Library ------------------------------------------------ */
-/* A quick model (no package) opens on Library; a package opens on its files. Both stay
-   mounted, so the library keeps its search when the rail switches. */
-.rail {
-  grid-area: library;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: var(--surface-panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-/* Rail, tabs, head, tree and foot: @paperboat/shared/files.css. Studio sets the width, and folds to a standing tab. */
-.files-panel { width: 244px; }
-.rail.collapsed { width: 30px; }
-.library-slot { flex: 1; min-width: 0; display: flex; }
-.library-slot > .library { flex: 1; min-height: 0; border: 0; border-radius: 0; background: none; }
+/* the runtimes key and its peek (as Julix's) */
+.popw { position: relative; }
+.key.rtk { position: relative; border-radius: var(--radius-md); }
+.rtk .badge { position: absolute; top: -6px; right: -7px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--surface-raised); border: 1px solid var(--accent-select); font: 600 10px/14px var(--font-mono); color: var(--accent-text); text-align: center; }
+.rtk .badge.bad { border-color: var(--danger); color: var(--danger); }
+@property --a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes rot { to { --a: 360deg; } }
+.rtk.live { border-color: transparent; background: linear-gradient(var(--surface-raised), var(--surface-raised)) padding-box, conic-gradient(from var(--a), var(--line) 0 60%, var(--accent) 100%) border-box; animation: rot var(--live-time) linear infinite; }
+@media (prefers-reduced-motion: reduce) { .rtk.live { animation: none; } }
+.rtpop { position: absolute; right: 0; top: calc(100% + 8px); width: 380px; padding: 0; z-index: 60; }
+.poph { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px 8px; } .poph b { font: 600 15px var(--font-display); } .poph span { margin-left: auto; font: 11px var(--font-mono); color: var(--text-muted); }
+.rt { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--line); align-items: start; }
+.rt b { font-weight: 600; } .rt small { display: block; font: 11px var(--font-mono); color: var(--text-muted); }
+.rt p { margin: 4px 0 0; font-size: 11.5px; color: var(--text-muted); } .rt p.now { color: var(--accent-text); display: flex; align-items: center; gap: 6px; }
+.rlg { width: 30px; height: 30px; border-radius: var(--radius-md); display: grid; place-items: center; font: 600 12px var(--font-mono); background: var(--surface-sunken); border: 1px solid var(--line); }
+.rt.run .rlg { border-color: var(--accent-select); } .rt.off .rlg { background: none; border-style: dashed; color: var(--text-muted); }
+.pfoot { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--text-muted); }
+.pfoot .key { margin-left: auto; }
+
+/* dialogs: a labelled well, About */
+.well.ask { display: flex; flex-direction: column-reverse; gap: 4px; padding: 8px 10px; }
+.well.ask input { all: unset; font: 13px var(--font-sans); color: var(--text); }
+.well.ask em { font: normal 11px var(--font-sans); color: var(--text-muted); }
+.about { display: grid; grid-template-columns: 64px 1fr; gap: 18px; align-items: start; }
+.about dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 12.5px; }
+.about dt { color: var(--text-muted); } .about dd { margin: 0; }
+.lib-quick-list { display: grid; gap: 4px; margin-bottom: 12px; }
+.lib-quick-item { all: unset; display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; border-radius: var(--radius-md); cursor: pointer; }
+.lib-quick-item:hover { background: var(--surface-sunken); }
 
 /* ---- Document tabs above the stage (#43) -------------------------------------------- */
 .docbar { display: flex; align-items: flex-end; gap: 2px; min-height: 31px; border-bottom: 1px solid var(--line); }

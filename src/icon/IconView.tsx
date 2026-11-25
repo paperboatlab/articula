@@ -4,24 +4,10 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import {
-  CORNER,
-  DASH,
-  FILL,
-  FONT,
-  STROKE,
-  WEIGHT,
-  type Corner,
-  type Dash,
-  type Fill,
-  type IconDef,
-  type IconPort,
-  type Prim,
-  type Pt,
-  type Stroke,
-  type Weight,
-} from "@paperboat/shared";
-import { CompactBlock, NumberField, Switch } from "@paperboat/shared/components";
+import { CORNER, DASH, FILL, FONT, STROKE, WEIGHT, type Corner, type Dash, type Fill, type IconDef, type IconPort, type Prim, type Pt, type Stroke, type Weight } from "@paperboatlab/ui/canvas";
+import { CompactBlock } from "@paperboatlab/ui/canvas";
+import { NumberField } from "@paperboatlab/ui";
+import { Segmented } from "@paperboatlab/ui";
 import { useStudio } from "../model/types.ts";
 import { SideSelect } from "../sheet/SideSelect.tsx";
 import {
@@ -532,16 +518,16 @@ export function IconView() {
             {selectedPrim ? (
               <div className="studio-look-choices">
                 <ColorRow label="stroke" value={selectedPrim.stroke ?? "ink"} swatches={STROKE_SWATCHES} onChange={(stroke) => patchSelected({ stroke: stroke as Stroke })} />
-                <Switch<Weight> label="Weight" value={selectedPrim.weight ?? "normal"} onChange={(weight) => patchSelected({ weight })} options={WEIGHT_OPTIONS} />
+                <Segmented<Weight> label="Weight" value={selectedPrim.weight ?? "normal"} onChange={(weight) => patchSelected({ weight })} options={WEIGHT_OPTIONS} />
                 <ColorRow label="fill" value={selectedPrim.fill ?? "none"} swatches={FILL_SWATCHES} onChange={(fill) => patchSelected({ fill: fill as Fill })} />
-                <Switch<Dash> label="Dash" value={selectedPrim.dash ?? "solid"} onChange={(dash) => patchSelected({ dash })} options={DASH_OPTIONS} />
+                <Segmented<Dash> label="Dash" value={selectedPrim.dash ?? "solid"} onChange={(dash) => patchSelected({ dash })} options={DASH_OPTIONS} />
                 {selectedPrim.t === "rect" && (
-                  <Switch<Corner> label="Corner" value={selectedPrim.corner ?? "0"} onChange={(corner) => patchSelected({ corner })} options={CORNER_OPTIONS} />
+                  <Segmented<Corner> label="Corner" value={selectedPrim.corner ?? "0"} onChange={(corner) => patchSelected({ corner })} options={CORNER_OPTIONS} />
                 )}
                 {selectedPrim.t === "text" && (
                   <>
-                    <Switch<"sans" | "mono"> label="Font" value={selectedPrim.font ?? "sans"} onChange={(font) => patchSelected({ font })} options={FONT_OPTIONS} />
-                    <Switch<"12" | "12.5" | "13" | "15" | "30">
+                    <Segmented<"sans" | "mono"> label="Font" value={selectedPrim.font ?? "sans"} onChange={(font) => patchSelected({ font })} options={FONT_OPTIONS} />
+                    <Segmented<"12" | "12.5" | "13" | "15" | "30">
                       label="Size"
                       value={String(selectedPrim.size ?? 12) as "12" | "12.5" | "13" | "15" | "30"}
                       onChange={(sz) => patchSelected({ size: Number(sz) as 12 | 12.5 | 13 | 15 | 30 })}
@@ -574,7 +560,7 @@ export function IconView() {
 
           <section className="icon-section">
             <h3>plate</h3>
-            <Switch<PlateSizeKey> label="Size" value={plateSizeKey(draft)} onChange={(sz) => change((icon) => applyPlateSize(icon, sz))} options={PLATE_SIZES.map((s) => ({ value: s, label: s }))} />
+            <Segmented<PlateSizeKey> label="Size" value={plateSizeKey(draft)} onChange={(sz) => change((icon) => applyPlateSize(icon, sz))} options={PLATE_SIZES.map((s) => ({ value: s, label: s }))} />
           </section>
 
           <section className="icon-section">

@@ -7,9 +7,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { CodeEditor, EditorSettingsKey, type ConfigFile, type EditorSettings } from "@paperboat/shared/editor";
+import { Editor as CodeEditor, EditorSettingsKey, type ConfigFile, type EditorSettings } from "@paperboatlab/ui/editor";
+import { modelica } from "@paperboatlab/ui/editor";
 import type { StudioModel } from "../model/types.ts";
-import { modelica } from "../split/modelica.ts";
 import type { Actions } from "../store/index.tsx";
 
 export type TextEditorHandle = { dirty: boolean; save: () => Promise<void> };

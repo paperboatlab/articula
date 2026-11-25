@@ -3,7 +3,7 @@
 // means: delete the wire R1.n-L1.p, add R2, connect R1.n to R2.p and R2.n to L1.p. The line
 // shown before you confirm is built here, from the same plan the expressions come from.
 
-import type { Connectors, IconPort } from "@paperboat/shared";
+import { type Connectors, type IconPort } from "@paperboatlab/ui/canvas";
 import type { Connection, Placement } from "../model/types.ts";
 import * as x from "./exprs.ts";
 

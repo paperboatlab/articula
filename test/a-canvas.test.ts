@@ -3,8 +3,8 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Ground, Inertia, Resistor } from "@paperboat/shared/fixtures/icons";
-import { iconValid } from "@paperboat/shared/icon";
+import { Ground, Inertia, Resistor } from "./fixtures/icons.ts";
+import { iconValid } from "@paperboatlab/ui/canvas";
 import { centreFor, plateOf, topLeft } from "../src/canvas/geometry.ts";
 import { rotateIcon } from "../src/canvas/rotate.ts";
 import { children, flat, search } from "../src/library/classes.ts";

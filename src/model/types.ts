@@ -1,7 +1,7 @@
 // The seam between Lane A and Lane B in this app (contracts §8). Frozen: change only through
 // the orchestrator. Lane A implements StudioApi and provides it; Lane B only consumes it.
 import { createContext, useContext } from "react";
-import type { Connectors, IconDef, IconPort, ParamDef } from "@paperboat/shared";
+import { type Connectors, type IconDef, type IconPort, type ParamDef } from "@paperboatlab/ui/canvas";
 import type { OmcClient, OmcStatus } from "../omc/omc.ts";
 
 /** Diagram-layer placement, on the 20px canvas grid. */

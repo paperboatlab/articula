@@ -3,7 +3,7 @@
 // drawing lives on the canvas (View ▸ Icon), not here.
 
 import { useEffect, useState } from "react";
-import { Switch } from "@paperboat/shared/components";
+import { Segmented } from "@paperboatlab/ui";
 import { useStudio } from "../model/types.ts";
 import { defaultExportFolder } from "../dock/dock.ts";
 import { PaperboatBlock } from "./PaperboatBlock.tsx";
@@ -55,7 +55,7 @@ export function InterfaceSheet({ open, onOpen, onClose, canExport }: InterfaceSh
       </button>
       <header className="studio-sheet-head" hidden={!open}>
         <h2 className="studio-sheet-title">{shortModel}</h2>
-        <Switch<SheetTab>
+        <Segmented<SheetTab>
           label="Tab"
           value={tab}
           onChange={setTab}

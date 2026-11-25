@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { iconNodes, iconValid, type IconDef, type Prim } from "@paperboat/shared";
+import { iconNodes } from "@paperboatlab/ui/canvas";
+import { iconValid, type IconDef, type Prim } from "@paperboatlab/ui/canvas";
 import {
   addPrimToIcon,
   applyPlateSize,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addDecoration, addTab, moveInstrument, moveToTab, resizeInstrument, setSettings } from "@paperboat/shared";
+import { addDecoration, addTab, moveInstrument, moveToTab, resizeInstrument, setSettings } from "../src/simulate/board.ts";
 import { addScope, arrangeScopes, picksOf, removeScope, START } from "../src/simulate/scopes.ts";
 
 test("scopes: added in order on a two-column grid, resized, moved, removed", () => {

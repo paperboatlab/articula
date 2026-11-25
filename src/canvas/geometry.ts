@@ -1,7 +1,7 @@
 // Where a part and its ports sit on the canvas, in px. A placement is the centre of the plate;
 // a port sits on the plate's edge, `at` percent along it.
 
-import { plateSize } from "@paperboat/shared";
+import { plateSize } from "@paperboatlab/ui/canvas";
 import type { ComponentInst } from "../model/types.ts";
 import { rotateIcon } from "./rotate.ts";
 

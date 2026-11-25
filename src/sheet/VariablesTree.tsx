@@ -3,7 +3,7 @@
 // checkbox on becomes a Station property the runtime can set.
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { NumberField } from "@paperboat/shared/components";
+import { NumberField } from "@paperboatlab/ui";
 import type { OmcClient } from "../omc/omc.ts";
 import { atom, list, parseValue } from "../omc/parse.ts";
 import type { ComponentInst, ModelVar, Param, StudioModel } from "../model/types.ts";

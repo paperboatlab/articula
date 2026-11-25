@@ -1,7 +1,7 @@
 // Which wires are valid (contracts §4), in the words the canvas shows. The rule itself is
 // `connectError` in @paperboat/shared; this only finds the two ends in the model.
 
-import { connectError, iconEnd, type Connectors, type IconPort, type WireEnd } from "@paperboat/shared";
+import { connectError, iconEnd, type Connectors, type IconPort, type WireEnd } from "@paperboatlab/ui/canvas";
 import type { ComponentInst, StudioModel } from "../model/types.ts";
 
 /** "R1.p" is part R1, port p; "u" (no dot) is the connector component u, whose one port is its own name. */

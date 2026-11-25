@@ -2,30 +2,12 @@
 // grid (#7), each plotting the channels picked in its dropdown, and Paperboat's floating run dock.
 // omc runs it; nothing leaves Studio and no block, board or station is involved.
 
-import {
-  addDecoration,
-  addTab,
-  editDecoration,
-  freshTabName,
-  loadSaved,
-  moveDecoration,
-  moveInstrument,
-  moveToTab,
-  removeDecoration,
-  removeTab,
-  renameTab,
-  resizeInstrument,
-  rowsOf,
-  saveLayout,
-  setSettings,
-  SIZE_LABEL,
-  tabIsEmpty,
-  type BoardLayout,
-} from "@paperboat/shared";
+import { addDecoration, addTab, editDecoration, freshTabName, loadSaved, moveDecoration, moveInstrument, moveToTab, removeDecoration, removeTab, renameTab, resizeInstrument, rowsOf, save as saveLayout, setSettings, SIZE_LABEL, tabIsEmpty, type BoardLayout } from "./board.ts";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { createPortal } from "react-dom";
-import { Dock, NumberField, SolverSettings } from "@paperboat/shared/components";
-import { Scope, type ScopeChannel, type ScopeSettings } from "@paperboat/shared/scope";
+import { Dock, NumberField } from "@paperboatlab/ui";
+import { SolverSettings } from "./SolverSettings.tsx";
+import { Scope, type ScopeChannel, type ScopeSettings } from "@paperboatlab/ui/scope";
 import { DEFAULTS, loadSolver, OPTIONS, saveSolver, SOLVERS, summary, type SolverChoice } from "./solver.ts";
 import type { StudioModel } from "../model/types.ts";
 import type { Actions, Stimulus } from "../store/index.tsx";
@@ -141,8 +123,8 @@ export function Simulate({
   // Run ▸ Solver settings… opens it from the menu bar
   useEffect(() => {
     const open = () => setSolverOpen(true);
-    window.addEventListener("squero:solver", open);
-    return () => window.removeEventListener("squero:solver", open);
+    window.addEventListener("articula:solver", open);
+    return () => window.removeEventListener("articula:solver", open);
   }, []);
   const inputs = model.entries.filter((e) => e.kind === "input").map((e) => e.name);
   const warnings = outputWarnings(model);
@@ -224,12 +206,12 @@ export function Simulate({
       e.preventDefault();
       latest.current.cancel();
     };
-    window.addEventListener("squero:simulate", start);
-    window.addEventListener("squero:cancel", stop);
+    window.addEventListener("articula:simulate", start);
+    window.addEventListener("articula:cancel", stop);
     window.addEventListener("keydown", key);
     return () => {
-      window.removeEventListener("squero:simulate", start);
-      window.removeEventListener("squero:cancel", stop);
+      window.removeEventListener("articula:simulate", start);
+      window.removeEventListener("articula:cancel", stop);
       window.removeEventListener("keydown", key);
     };
   }, []);

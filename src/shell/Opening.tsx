@@ -1,14 +1,11 @@
-// The wait screen: says what Studio is really waiting for, in order: the OpenModelica runtime
-// starting, then the Modelica library loading with the model, then reading the model. The screen
-// itself (timer, wave, hint) is the shared WaitScreen; only Studio's words are here.
-import { WaitScreen } from "@paperboat/shared/components";
+// While omc starts and the first model loads: the kit's Splash, with Articula's words. (The start screen
+// is to be redesigned; this only says what is being waited for.)
+import { Splash } from "@paperboatlab/ui";
 import type { OmcStatus } from "../omc/omc.ts";
 
-export function Opening({ status, stage, error }: { status: OmcStatus; stage: string; error: string }) {
+export function Opening({ status, stage, error, onRetry }: { status: OmcStatus; stage: string; error: string; onRetry: () => void }) {
   const failed = !!error || status.state === "failed";
-  const words = error || (status.state === "failed" ? "No Studio server: start one with squero-om" : status.state === "checking" ? "starting the OpenModelica runtime" : stage);
-  const hint = status.state === "checking"
-    ? "OpenModelica starts a fresh process: this is the slow part of a cold start."
-    : "The first open loads the whole Modelica Standard Library, which takes a few seconds.";
-  return <WaitScreen words={words} failed={failed} hint={hint} />;
+  const say = error || (status.state === "failed" ? "The Articula server went away" : status.state === "checking" ? "Starting OpenModelica" : stage || "Opening the model");
+  const detail = status.state === "checking" ? "paperboatd · the omc runtime" : status.version;
+  return <Splash app="articula" say={say} detail={detail} failed={failed} onRetry={onRetry} />;
 }

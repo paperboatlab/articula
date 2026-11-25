@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useReactFlow, useViewport } from "@xyflow/react";
-import { NumberField } from "@paperboat/shared/components";
+import { NumberField } from "@paperboatlab/ui";
 import { useStudio } from "../model/types.ts";
 import {
   bindParamToTopLevel,

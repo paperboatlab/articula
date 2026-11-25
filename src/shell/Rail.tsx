@@ -1,9 +1,17 @@
-// The left rail: Files (the model's folder, its packages and classes) or the Library (the
-// component browser). The rail and tree are @paperboat/shared/files (FileRail, FileTree), the same
-// as MX; this file only maps the workspace entries and the Studio actions.
+// The left card (REBRAND card panels): Files (the workspace's classes and packages) and Library (the
+// component browser), as tabs in one panel that hides to a slim bar (Ctrl B). The tree is the kit's
+// FileTree; a class row shows its kind as a letter.
+import { Icon, Panel, Tabs } from "@paperboatlab/ui";
 import { useRef, type ReactNode } from "react";
-import { FileRail, FileTree, type FileEntry, type FileTreeHandle } from "@paperboat/shared/files";
+import { FileTree, type FileEntry, type FileTreeHandle } from "@paperboatlab/ui/files";
 import { gitMark, visibleEntries, workspaceName, type GitState, type Workspace, type WorkspaceEntry } from "./workspace.ts";
+
+const KIND: Record<string, string> = { model: "M", block: "B", connector: "C", record: "R", function: "F", package: "P", type: "T", class: "C" };
+function Glyph({ entry }: { entry: WorkspaceEntry }) {
+  if (entry.kind === "package") return <span className="ck pkg"><Icon name="package" size={14} /></span>;
+  const kind = entry.classKind ?? "class";
+  return <span className={`ck ck-${kind}`} title={kind}>{KIND[kind] ?? "C"}</span>;
+}
 
 export type RailTab = "files" | "library";
 
@@ -39,9 +47,9 @@ export function Rail({
   onDelete: (entry: WorkspaceEntry) => void;
   onCopyPath: (entry: WorkspaceEntry) => void;
   onMove: (source: WorkspaceEntry, target?: WorkspaceEntry) => void;
-  /** Folded to a standing tab. */
+  /** Hidden to its slim bar. */
   collapsed?: boolean;
-  onToggle?: () => void;
+  onToggle?: (hidden: boolean) => void;
   children: ReactNode;
 }) {
   const tree = useRef<FileTreeHandle>(null);
@@ -50,42 +58,24 @@ export function Rail({
     name: entry.name,
     depth: entry.depth,
     kind: entry.kind === "package" ? "folder" : "file",
-    icon: entry.kind === "package" ? "package" : (entry.classKind ?? "class"),
-    badge: entry.kind === "package" ? "package" : gitMark(git, entry.path),
+    glyph: <Glyph entry={entry} />,
+    badge: entry.kind === "package" ? undefined : gitMark(git, entry.path) || undefined,
   }));
   const find = (entry?: FileEntry) => (entry ? workspace?.entries.find((one) => one.path === entry.path) : undefined);
   const classes = workspace?.entries.filter((entry) => entry.kind === "class").length ?? 0;
 
   return (
-    <FileRail
-      label="Files and library"
-      className={`rail-${tab}`}
-      tabs={["files", "library"]}
-      tab={tab}
-      onTab={(next) => onTab(next as RailTab)}
-      onAdd={(x, y) => tree.current?.openNewMenu(x, y)}
-      addTitle="New class or package"
-      name={workspaceName(workspace)}
-      nameTitle={workspace?.root}
-      badge={workspace ? (workspace.package ? "package" : "quick") : ""}
-      foot={`${classes} ${classes === 1 ? "class" : "classes"}`}
-      collapsed={collapsed}
-      onToggle={onToggle}
-      tree={
+    <Panel name={tab === "files" ? workspaceName(workspace) : "Library"} side="left" icon={tab === "files" ? "folder" : "a-library"} width={272}
+      hidden={collapsed} onHidden={(h) => onToggle?.(h)} className={`rail rail-${tab}`}
+      count={tab === "files" ? `${classes} ${classes === 1 ? "class" : "classes"}` : undefined}
+      head={<Tabs label="Files and library" value={tab} onChange={onTab} tabs={[{ value: "files", label: "Files" }, { value: "library", label: "Library" }]} />}>
+      <div className="rail-body" hidden={tab !== "files"} title={workspace?.root}>
         <FileTree
           ref={tree}
           entries={entries}
           active={active}
           ariaLabel="Workspace"
-          labels={{
-            newFile: "New class…",
-            newFolder: "New package…",
-            rename: "Rename…",
-            duplicate: "Duplicate…",
-            delete: "Delete…",
-            copyPath: "Copy path",
-            empty: "No .mo files here yet. Create a class with +.",
-          }}
+          labels={{ newFile: "New class…", newFolder: "New package…", rename: "Rename…", duplicate: "Duplicate…", delete: "Delete…", copyPath: "Copy path", empty: "No .mo files here yet: File › New class (Ctrl Shift N)." }}
           actions={{
             onOpen: (entry) => onOpen(entry.path),
             onNewFile: (parent) => onNewClass(find(parent)),
@@ -97,11 +87,8 @@ export function Rail({
             onMove: (source, target) => { const one = find(source); if (one) onMove(one, find(target)); },
           }}
         />
-      }
-    >
-      <div className="library-slot" hidden={tab !== "library"}>
-        {children}
       </div>
-    </FileRail>
+      <div className="rail-body library-slot" hidden={tab !== "library"}>{children}</div>
+    </Panel>
   );
 }

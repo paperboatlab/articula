@@ -1,28 +1,33 @@
-// Squero Studio: OpenModelica. Provides StudioContext and mounts Lane B's slots exactly as their
-// stubs declare: the popover on a component click, the sheet on Alt+V, the dock always.
+// Articula: an OpenModelica editor (agent-docs/rebrand; the window of Julix and Malachite): the bar (mark,
+// menus, the model, Check and Simulate, the runtimes key, the Panels key, the theme); Files and Library
+// at the left; the model's views in the middle (diagram, icon, 3D, text) over the Console; the source
+// and Simulate at the right. Provides StudioContext; the popover opens on a component click, the
+// interface sheet on Alt V, the export dock under the stage.
 
 import { ReactFlowProvider } from "@xyflow/react";
-import { CommandSearch, HelpWindow, Switch } from "@paperboat/shared/components";
-import { helpCommand, SEARCH_CHORD, useShortcuts, type Command } from "@paperboat/shared";
+import { AppMark, Key, MenuBar, Panel, PanelsKey, Search, Segmented, ThemePicker, readStored, writeStored, type PaneRect, type SearchItem } from "@paperboatlab/ui";
+import { HelpWindow } from "@paperboatlab/ui";
+import { helpCommand, SEARCH_CHORD, useShortcuts, type Command } from "@paperboatlab/ui";
 import { omHelp } from "./shell/help.ts";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { useSqueroConfig, type ConfigStore } from "@paperboat/shared/editor";
+import { useAppConfig as useSqueroConfig, type ConfigStore } from "@paperboatlab/ui/editor";
 import { Canvas } from "./canvas/Canvas.tsx";
 import { runStationExport } from "./dock/dock.ts";
 import { StudioDock } from "./dock/index.tsx";
 import { Library, useClassIndex } from "./library/Library.tsx";
-import { PackageWindow } from "@paperboat/shared/packages";
+import { PackageWindow } from "@paperboatlab/ui/packages";
 import { Packages } from "./library/Packages.tsx";
 import { StudioContext, type StudioModel } from "./model/types.ts";
 import { OmcClient, type OmcStatus } from "./omc/omc.ts";
-import { type Log, type Message } from "@paperboat/shared/components";
+import { type Log, type Message } from "@paperboatlab/ui";
 import { ComponentPopover } from "./popover/index.tsx";
 import { InterfaceSheet } from "./sheet/index.tsx";
 import { IconView } from "./icon/IconView.tsx";
 import { AboutModal } from "./shell/AboutModal.tsx";
 import { ConfirmModal, LibraryModal, PromptModal } from "./shell/Dialogs.tsx";
-import { TopBar } from "./shell/TopBar.tsx";
-import { THEMES, useTheme } from "@paperboat/shared/components";
+import { OmcKey } from "./shell/OmcKey.tsx";
+import { MENUS } from "./shell/menus.ts";
+import { THEMES, useTheme } from "@paperboatlab/ui";
 import { Opening } from "./shell/Opening.tsx";
 import { Simulate } from "./simulate/Simulate.tsx";
 import { Viewport3D, type ShapeRun } from "./viewport3d/Viewport3D.tsx";
@@ -33,7 +38,7 @@ import { Rail, type RailTab } from "./shell/Rail.tsx";
 import { TextStage, type TextEditorHandle } from "./shell/TextStage.tsx";
 import { NewClassSheet } from "./shell/NewClassSheet.tsx";
 import type { NewClassSpec } from "./shell/newClass.ts";
-import { closeDoc, neighbour, openDoc, type Doc, type GitState, type Workspace, type WorkspaceEntry } from "./shell/workspace.ts";
+import { closeDoc, neighbour, openDoc, workspaceName, type Doc, type GitState, type Workspace, type WorkspaceEntry } from "./shell/workspace.ts";
 import { packageName } from "./shell/newClass.ts";
 import { freeSpot } from "./store/plans.ts";
 import { useStudioStore } from "./store/index.tsx";
@@ -44,8 +49,16 @@ type Stage = "diagram" | "icon" | "3d" | "text";
 function serverUrl(): string {
   const given = new URLSearchParams(location.search).get("server");
   if (given) return given;
-  return location.port === "3048" || !location.host ? "ws://localhost:59201" : `ws://${location.host}`;
+  return !location.host ? "ws://localhost:59240" : `ws://${location.host}`;
 }
+
+type Side = "l" | "r" | "b";
+const PANELS: { side: Side; name: string; keys: string }[] = [
+  { side: "l", name: "Files and library", keys: "Ctrl B" }, { side: "b", name: "Console", keys: "Ctrl J" }, { side: "r", name: "Source and Simulate", keys: "Ctrl Alt B" },
+];
+/** The window as the Panels key sketches it: files, the model, the console, source and simulate. */
+const LAYOUT: Record<string, PaneRect> = { l: [4, 4, 12, 36], m: [18, 4, 26, 26], b: [18, 32, 26, 8], r: [46, 4, 14, 36] };
+const isHidden = (v: unknown): v is Record<Side, boolean> => !!v && typeof v === "object" && PANELS.every((p) => typeof (v as Record<string, unknown>)[p.side] === "boolean");
 
 
 export function App() {
@@ -88,7 +101,12 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const { api, actions, error, stage } = useStudioStore(omc, status);
   const [popover, setPopover] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
-  const [side, setSide] = useState(true);
+  // which cards are hidden (the Panels key, Ctrl B / Ctrl J / Ctrl Alt B), kept between visits
+  const [hidden, setHidden] = useState<Record<Side, boolean>>(() => readStored("articula.panels", isHidden) ?? { l: false, r: false, b: true });
+  useEffect(() => writeStored("articula.panels", hidden), [hidden]);
+  const toggle = (side: Side, h?: boolean) => setHidden((now) => ({ ...now, [side]: h ?? !now[side] }));
+  const side = !hidden.r;
+  const setSide = (f: (shown: boolean) => boolean) => toggle("r", !f(side));
   const [running, setRunning] = useState(false);
   const [view, setView] = useState<View>("flat");
   const [focus, setFocus] = useState<Focus>("split");
@@ -99,7 +117,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   // The rail opens on the files of the Studio's folder, as MX does; the library is a click away.
   const [rail, setRail] = useState<RailTab>("files");
-  const [railHidden, setRailHidden] = useState(false);
+  const railHidden = hidden.l;
   const [newClassOpen, setNewClassOpen] = useState(false);
   const [newClassWithin, setNewClassWithin] = useState<string | undefined>(undefined);
   const [workspaceTick, setWorkspaceTick] = useState(0);
@@ -108,7 +126,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const workspaceCache = useRef(new Map<string, Workspace>());
   const [shapeRun, setShapeRun] = useState<ShapeRun | null>(null);
   // The app theme and the editor settings, from the user's squero.toml (shared with MX).
-  const settings = useSqueroConfig(config, { editor: "om.editor", theme: "studio-theme" });
+  const settings = useSqueroConfig(config, { editor: "articula.editor", theme: "paperboat.theme" });
   const { theme, setTheme } = settings;
   const shown = useTheme(theme);
   const [promptModal, setPromptModal] = useState<PromptSpec | null>(null);
@@ -119,7 +137,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [helpQuery, setHelpQuery] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false); // the command search (Ctrl+K)
   const [logs, setLogs] = useState<Log[]>([]);
-  const [consoleShown, setConsoleShown] = useState(false);
+  const consoleShown = !hidden.b;
+  const setConsoleShown = (shown: boolean) => toggle("b", !shown);
   const [consoleTab, setConsoleTab] = useState<ConsoleTab>("console");
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
@@ -127,7 +146,6 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [sourceLine, setSourceLine] = useState(0);
   const [textDirty, setTextDirty] = useState(false);
   const editorHandle = useRef<TextEditorHandle | null>(null);
-  const errors = logs.filter((l) => l.level === "error").length;
   const say = (text: string, level: Log["level"] = "info") => setLogs((l) => [...l, { level, text }]);
   // omc's own messages stream into the Console while it works; the server pushes them.
   useEffect(() => {
@@ -136,11 +154,6 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       setLogs((l) => [...l, { level: message.level === "warning" ? "warn" : message.level, text: `${message.text}${at}` }]);
     });
   }, [omc]);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setConsoleShown(false);
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
   const fail = (e: Error) => say(e.message, "error");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const classes = useClassIndex(omc);
@@ -161,10 +174,10 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const stageOptions = useMemo(() => {
     const kind = classKind ?? "model";
     const out: { value: Stage; label: string; hint: string }[] = [];
-    if (kind === "model" || kind === "block") out.push({ value: "diagram", label: "diagram", hint: "The model's parts and wires" });
-    if (kind === "model" || kind === "block" || kind === "connector") out.push({ value: "icon", label: "icon", hint: "Draw the icon and place connectors" });
-    if ((kind === "model" || kind === "block") && hasMultiBody) out.push({ value: "3d", label: "3d", hint: "The last MultiBody run in 3D" });
-    out.push({ value: "text", label: "text", hint: "The model's .mo" });
+    if (kind === "model" || kind === "block") out.push({ value: "diagram", label: "Diagram", hint: "The model's parts and wires" });
+    if (kind === "model" || kind === "block" || kind === "connector") out.push({ value: "icon", label: "Icon", hint: "Draw the icon and place connectors" });
+    if ((kind === "model" || kind === "block") && hasMultiBody) out.push({ value: "3d", label: "3D", hint: "The last MultiBody run in 3D" });
+    out.push({ value: "text", label: "Text", hint: "The model's .mo" });
     return out;
   }, [classKind, hasMultiBody]);
 
@@ -231,7 +244,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const workingFile = model?.file ? model.file.slice(model.file.lastIndexOf("/") + 1) : model?.name;
   const fileDirty = actions.dirty || textDirty;
   useEffect(() => {
-    document.title = workingFile ? `${fileDirty ? "● " : ""}${workingFile} · Squero Studio` : "Squero Studio";
+    document.title = workingFile ? `${fileDirty ? "● " : ""}${workingFile} · Articula` : "Articula";
   }, [workingFile, fileDirty]);
   useEffect(() => {
     if (!gitRoot) { setGit(null); return; }
@@ -623,15 +636,15 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       },
       {
         id: "file.load-library",
-        label: "Load Modelica Library…",
-        menu: "file",
+        label: "Load a library…",
+        menu: "model",
         group: "library",
         run: () => setLibraryModalOpen(true),
       },
       {
         id: "file.export",
-        label: "Export Paperboat Station (.pst)",
-        menu: "file",
+        label: "Export station…",
+        menu: "model",
         group: "export",
         shortcut: "Ctrl+E",
         chord: { key: "e", ctrl: true },
@@ -647,7 +660,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       // Model menu (#68)
       {
         id: "model.check",
-        label: "Check Model",
+        label: "Check",
         menu: "model",
         group: "check",
         shortcut: "Ctrl+Shift+C",
@@ -657,13 +670,13 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       },
       {
         id: "model.flat",
-        label: "Show Flat Model…",
+        label: "Show the flat model",
         menu: "model",
         group: "check",
         shortcut: "Ctrl+Shift+F",
         chord: { key: "f", ctrl: true, shift: true },
         enabled: Boolean(model),
-        run: () => (setView("flat"), setSide(true)),
+        run: () => (setView("flat"), setSide(() => true)),
       },
       {
         id: "model.messages",
@@ -676,69 +689,63 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         run: () => openConsole("messages"),
       },
 
+      // Model menu: Simulate and its settings (Check and the flat model are above)
+      { id: "simulate", label: "Simulate", menu: "model", group: "simulate", shortcut: "Ctrl+R", chord: { key: "r", ctrl: true }, enabled: !!model && !running, why: running ? "a simulation is running" : "open a model first", run: () => (setSide(() => true), requestAnimationFrame(() => window.dispatchEvent(new Event("articula:simulate")))) },
+      { id: "cancel-simulate", label: "Cancel simulation", menu: "model", group: "simulate", enabled: running, why: "no simulation is running", run: () => window.dispatchEvent(new Event("articula:cancel")) },
+      { id: "solver", label: "Solver settings…", menu: "model", group: "solver", run: () => (setSide(() => true), window.dispatchEvent(new Event("articula:solver"))) },
+      { id: "libraries", label: "Libraries…", menu: "model", group: "libraries", run: () => setPackagesOpen(true) },
+
       // View menu
       { id: "view.search", label: "Command search…", menu: "view", group: "search", shortcut: "Ctrl+K", chord: SEARCH_CHORD, quiet: true, run: () => setSearchOpen(true) },
-      { id: "simulate", label: "Simulate", menu: "run", group: "simulate", shortcut: "Ctrl+Enter", chord: { key: "enter", ctrl: true }, enabled: !!model && !running, why: running ? "a simulation is running" : "open a model first", run: () => (setSide(true), requestAnimationFrame(() => window.dispatchEvent(new Event("squero:simulate")))) },
-      { id: "cancel-simulate", label: "Cancel simulation", menu: "run", group: "simulate", shortcut: "Ctrl+C", enabled: running, why: "no simulation is running", run: () => window.dispatchEvent(new Event("squero:cancel")) },
-      { id: "solver", label: "Solver settings…", menu: "run", group: "solver", run: () => (setSide(true), window.dispatchEvent(new Event("squero:solver"))) },
-      { id: "rail", label: "Files and library", menu: "view", group: "panes", checked: !railHidden, run: () => setRailHidden((v) => !v) },
-      { id: "side", label: "Source and Simulate", menu: "view", group: "panes", checked: side, run: () => setSide((s) => !s) },
+      { id: "rail", label: "Files and library", menu: "view", group: "panes", shortcut: "Ctrl+B", chord: { key: "b", ctrl: true }, checked: !railHidden, run: () => toggle("l") },
+      { id: "side", label: "Source and Simulate", menu: "view", group: "panes", shortcut: "Ctrl+Alt+B", chord: { key: "b", ctrl: true, alt: true }, checked: side, run: () => toggle("r") },
+      { id: "console", label: "Console", menu: "view", group: "panes", shortcut: "Ctrl+J", chord: { key: "j", ctrl: true }, checked: consoleShown, run: toggleConsole },
       ...stageOptions.map((option): Command => ({ id: `stage-${option.value}`, label: option.label, menu: "view", group: "stage", checked: stageView === option.value, run: () => setStageView(option.value) })),
-      { id: "flat", label: "flat model", menu: "view", group: "source", checked: view === "flat", run: () => (setView("flat"), setSide(true)) },
-      { id: "cpp", label: "causal ODE c++", menu: "view", group: "source", checked: view === "cpp", run: () => (setView("cpp"), setSide(true)) },
-      ...(["code", "split", "scopes"] as Focus[]).map((f): Command => ({ id: `focus-${f}`, label: f === "split" ? "Code and scopes" : f === "code" ? "Focus code" : "Focus scopes", menu: "view", group: "focus", checked: focus === f, run: () => (setFocus(f), setSide(true)) })),
-      { id: "console", label: "Console", menu: "view", group: "sheet", checked: consoleShown, run: toggleConsole },
+      { id: "flat", label: "Flat model", menu: "view", group: "source", checked: view === "flat", run: () => (setView("flat"), setSide(() => true)) },
+      { id: "cpp", label: "Causal ODE (C++)", menu: "view", group: "source", checked: view === "cpp", run: () => (setView("cpp"), setSide(() => true)) },
+      ...(["code", "split", "scopes"] as Focus[]).map((f): Command => ({ id: `focus-${f}`, label: f === "split" ? "Source and plots" : f === "code" ? "Source only" : "Plots only", menu: "view", group: "focus", checked: focus === f, run: () => (setFocus(f), setSide(() => true)) })),
       { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
-      ...THEMES.map((t): Command => ({ id: `theme-${t}`, label: t, menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
-      helpCommand(() => setHelpQuery(helpContext())),
-      { id: "about", label: "About Squero Studio", menu: "view", group: "about", run: () => setAboutOpen(true) },
+      ...THEMES.map((t): Command => ({ id: `theme-${t}`, label: t[0].toUpperCase() + t.slice(1), menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
+      { ...helpCommand(() => setHelpQuery(helpContext())), menu: "help" },
+      { id: "about", label: "About Articula", menu: "help", group: "about", run: () => setAboutOpen(true) },
     ],
-    [actions.canUndo, running, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, railHidden, view, stageView, stageOptions, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole, saveCurrent, exportReady, exportWhy],
+    [actions.canUndo, running, hidden, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, railHidden, view, stageView, stageOptions, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole, saveCurrent, exportReady, exportWhy],
   );
   useShortcuts(commands);
   const helpProvider = useMemo(() => omHelp(omc), [omc]);
 
+  const searchItems = useMemo<SearchItem[]>(() => [
+    ...commands.filter((c) => !c.quiet).map((c): SearchItem => ({ id: c.id, label: c.label, group: "Commands", shortcut: c.shortcut, disabled: c.enabled === false, why: c.why, run: c.run })),
+    ...(workspace?.entries ?? []).filter((e) => e.kind === "class").map((e): SearchItem => ({ id: `file:${e.path}`, label: e.name, group: "Files", detail: e.path.slice((workspace?.root.length ?? 0) + 1), run: () => void openDocument(e.path) })),
+  ], [commands, workspace]);
+  const live = running || status.state === "checking";
+
   return (
     <StudioContext.Provider value={api}>
-      <div className={`studio${side ? " with-side" : ""}${stageView === "text" || stageView === "icon" ? " no-dock" : ""}`}>
-        <TopBar
-          status={status}
-          model={model?.name}
-          dirty={actions.dirty}
-          commands={commands}
-          side={side}
-          onToggleSide={() => setSide((s) => !s)}
-          focus={
-            <Switch<Focus>
-              label="Focus"
-              value={focus}
-              onChange={setFocus}
-              options={[
-                { value: "code", label: "code", hint: "The source fills the pane" },
-                { value: "split", label: "split", hint: "Source above, scopes below" },
-                { value: "scopes", label: "scopes", hint: "The scopes fill the pane" },
-              ]}
-            />
-          }
-          errors={errors}
-          consoleShown={consoleShown}
-          onConsole={toggleConsole}
-          aboutShown={aboutOpen}
-          onAbout={() => setAboutOpen(true)}
-          helpShown={helpQuery !== null}
-          onHelp={() => setHelpQuery("")}
-          theme={theme}
-          onTheme={setTheme}
-          onStatusClick={() => setPackagesOpen(true)}
-          running={running}
-        />
+      <div className={`win studio${stageView === "text" || stageView === "icon" ? " no-dock" : ""}`}>
+        <header className="bar">
+          <AppMark app="articula" size={26} idle={!live} label="Articula" />
+          <span className="wm">Articula</span>
+          <MenuBar commands={commands} menus={MENUS} />
+          {model && <span className="well proj" title={model.file}>{model.name}{fileDirty && <i className="dot" title="Not saved" />}</span>}
+          <span className="bend">
+            {model && <Key size="sm" kind="quiet" icon="check" disabled={checking} onClick={() => void runCheck()} title="Check the model (Ctrl Shift C)">{checking ? "Checking…" : "Check"}</Key>}
+            {running
+              ? <Key busy onClick={() => window.dispatchEvent(new Event("articula:cancel"))} title="Cancel the simulation">Cancel</Key>
+              : <Key kind="primary" icon="play" disabled={!model} onClick={() => (toggle("r", false), requestAnimationFrame(() => window.dispatchEvent(new Event("articula:simulate"))))} title="Simulate (Ctrl R)">Simulate</Key>}
+            <OmcKey status={status} running={running} onLibraries={() => setPackagesOpen(true)} />
+            <PanelsKey panels={PANELS.map((p) => ({ id: p.side, label: p.name, keys: p.keys, shown: !hidden[p.side] }))} layout={LAYOUT} onToggle={(id) => toggle(id as Side)} />
+            <span className="lsep" />
+            <ThemePicker theme={theme} onChange={setTheme} />
+          </span>
+        </header>
         {api && model ? (
-          <>
+          <main className="ws">
             <Rail
               tab={rail}
               onTab={setRail}
               collapsed={railHidden}
-              onToggle={() => setRailHidden((v) => !v)}
+              onToggle={(h) => toggle("l", h)}
               workspace={workspace}
               git={git}
               active={model.file}
@@ -756,68 +763,90 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             >
               <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model)).then((name) => api.select([name]))} />
             </Rail>
-            <main className="stage" aria-label={model.name}>
-              <DocTabs
-                docs={docs}
-                active={model.file}
-                dirty={actions.dirty || textDirty}
-                meta={workspace?.root}
-                onSelect={(doc) => void openDocument(doc.file)}
-                onClose={(doc) => void closeDocument(doc)}
-                onOpen={() => fileInputRef.current?.click()}
-              />
-              <Switch<Stage> label="View" value={stageView} onChange={setStageView} options={stageOptions} />
-              <div className="stage-view">
-                <div className="stage-pane" hidden={stageView !== "diagram"}>
-                  <Canvas api={api} actions={actions} classes={classes} onOpen={setPopover} />
-                </div>
-                {stageView === "3d" &&
-                  (shapeRun?.shapes?.length ? (
-                    <Viewport3D run={shapeRun} theme={shown} />
-                  ) : (
-                    <p className="stage-empty"><span>Run a <span className="mono">Modelica.Mechanics.MultiBody</span> model to see it here.</span></p>
-                  ))}
-                <div className="stage-pane" hidden={stageView !== "text"}>
-                  <TextStage
-                    model={model}
-                    actions={actions}
-                    line={sourceLine}
-                    theme={shown}
-                    settings={settings.editor}
-                    onSettings={settings.setEditor}
-                    configFile={settings.file}
-                    base={model.file ? git?.head[model.file] ?? null : null}
-                    onEditor={(handle) => {
-                      editorHandle.current = handle;
-                      setTextDirty(handle?.dirty ?? false);
-                    }}
+            <div className="mid">
+              <main className="panel stage" aria-label={model.name}>
+                <div className="ntabs">
+                  <DocTabs
+                    docs={docs}
+                    active={model.file}
+                    dirty={actions.dirty || textDirty}
+                    meta={workspace?.root}
+                    onSelect={(doc) => void openDocument(doc.file)}
+                    onClose={(doc) => void closeDocument(doc)}
+                    onOpen={() => fileInputRef.current?.click()}
                   />
+                  <Segmented<Stage> label="View" value={stageView} onChange={setStageView} options={stageOptions} />
                 </div>
-                {stageView === "icon" && <IconView />}
-              </div>
-            </main>
-            <aside className={`side focus-${focus}`} inert={!side}>
-                <Split model={model} actions={actions} view={view} onView={setView} settings={settings.editor} appTheme={shown} />
-                <Simulate actions={actions} model={model} onRunningChange={setRunning} onRun={(r) => setShapeRun(r.shapes?.length ? r : null)} />
-              </aside>
+                <div className="stage-view">
+                  <div className="stage-pane" hidden={stageView !== "diagram"}>
+                    <Canvas api={api} actions={actions} classes={classes} onOpen={setPopover} />
+                  </div>
+                  {stageView === "3d" &&
+                    (shapeRun?.shapes?.length ? (
+                      <Viewport3D run={shapeRun} theme={shown} />
+                    ) : (
+                      <p className="stage-empty"><span>Simulate a <span className="mono">Modelica.Mechanics.MultiBody</span> model to see it here.</span></p>
+                    ))}
+                  <div className="stage-pane" hidden={stageView !== "text"}>
+                    <TextStage
+                      model={model}
+                      actions={actions}
+                      line={sourceLine}
+                      theme={shown}
+                      settings={settings.editor}
+                      onSettings={settings.setEditor}
+                      configFile={settings.file}
+                      base={model.file ? git?.head[model.file] ?? null : null}
+                      onEditor={(handle) => {
+                        editorHandle.current = handle;
+                        setTextDirty(handle?.dirty ?? false);
+                      }}
+                    />
+                  </div>
+                  {stageView === "icon" && <IconView />}
+                  <div className="dock-slot">
+                    <StudioDock
+                      canExport={exportReady}
+                      why={exportWhy}
+                      beforeExport={saveCurrent}
+                      onLog={(text, level) => {
+                        setConsoleTab("console");
+                        setConsoleShown(true);
+                        say(text, level);
+                      }}
+                    />
+                  </div>
+                </div>
+              </main>
+              <StudioConsole
+                logs={logs}
+                messages={messages}
+                tab={consoleTab}
+                selected={selectedMessage}
+                checking={checking}
+                hidden={hidden.b}
+                onHidden={(h) => toggle("b", h)}
+                onTab={setConsoleTab}
+                onSelect={setSelectedMessage}
+                onOpen={openMessage}
+                onCheck={() => void runCheck()}
+              />
+            </div>
+            <Panel name="Simulate" side="right" icon="play" width={420} hidden={hidden.r} onHidden={(h) => toggle("r", h)} className={`side focus-${focus}`}
+              head={<Segmented<Focus> label="Focus" value={focus} onChange={setFocus} options={[
+                { value: "code", label: "Source", hint: "The source fills the card" },
+                { value: "split", label: "Both", hint: "Source above, plots below" },
+                { value: "scopes", label: "Plots", hint: "The plots fill the card" },
+              ]} />}>
+              <Split model={model} actions={actions} view={view} onView={setView} settings={settings.editor} appTheme={shown} />
+              <Simulate actions={actions} model={model} onRunningChange={setRunning} onRun={(r) => setShapeRun(r.shapes?.length ? r : null)} />
+            </Panel>
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
             <InterfaceSheet open={sheet} onOpen={() => setSheet(true)} onClose={() => setSheet(false)} canExport={canExport} />
             {newClassOpen && <NewClassSheet workspace={workspace} model={model} defaultWithin={newClassWithin} onClose={() => setNewClassOpen(false)} onCreate={createNewClass} />}
-            <div className="dock-slot">
-              <StudioDock
-                canExport={exportReady}
-                why={exportWhy}
-                beforeExport={saveCurrent}
-                onLog={(text, level) => {
-                  setConsoleTab("console");
-                  setConsoleShown(true);
-                  say(text, level);
-                }}
-              />
-            </div>
-          </>
+          </main>
         ) : (
-          <Opening status={status} stage={stage} error={error} />
+          <Opening status={status} stage={stage} error={error} onRetry={() => location.reload()} />
         )}
 
         <input
@@ -858,30 +887,16 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         )}
 
         {packagesOpen && (
-          <PackageWindow title="OpenModelica" tags={[`omc ${status.state}`, serverUrl()]} onClose={() => setPackagesOpen(false)}>
+          <PackageWindow title="Modelica libraries" tags={[status.version || "omc", "this workspace"]} onClose={() => setPackagesOpen(false)}>
             <Packages omc={omc} onInstalled={(name) => say(`Installed ${name}: load it from the Library`)} />
           </PackageWindow>
         )}
 
         {aboutOpen && <AboutModal omc={omc} status={status} onClose={() => setAboutOpen(false)} />}
-        {helpQuery !== null && <HelpWindow app="Squero Studio OM" provider={helpProvider} commands={commands} query={helpQuery} onClose={() => setHelpQuery(null)} />}
+        {helpQuery !== null && <HelpWindow app="Articula" provider={helpProvider} commands={commands} query={helpQuery} onClose={() => setHelpQuery(null)} />}
 
-        {searchOpen && <CommandSearch commands={commands} onClose={() => setSearchOpen(false)} />}
+        {searchOpen && <Search items={searchItems} scopes={["All", "Commands", "Files"]} placeholder={`Search ${workspace ? workspaceName(workspace) : "the workspace"}, or run a command`} onClose={() => setSearchOpen(false)} />}
 
-        {consoleShown && (
-          <StudioConsole
-            logs={logs}
-            messages={messages}
-            tab={consoleTab}
-            selected={selectedMessage}
-            checking={checking}
-            onTab={setConsoleTab}
-            onSelect={setSelectedMessage}
-            onOpen={openMessage}
-            onCheck={() => void runCheck()}
-            onClose={() => setConsoleShown(false)}
-          />
-        )}
       </div>
     </StudioContext.Provider>
   );

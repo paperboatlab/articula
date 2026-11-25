@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { StudioModel } from "../model/types.ts";
 import type { Actions } from "../store/index.tsx";
 import { CodeView } from "./CodeView.tsx";
-import type { EditorSettings } from "@paperboat/shared/editor";
+import { type EditorSettings } from "@paperboatlab/ui/editor";
 
 export type View = "flat" | "cpp";
 const OPTIONS: { value: View; label: string }[] = [

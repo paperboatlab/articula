@@ -1,7 +1,7 @@
 // What a Modelica class looks like on the canvas: its imported icon and connector table, from
 // the server's `icon` op, cached per class (library classes never change under Studio).
 
-import type { ConnectorDef, Connectors, IconDef, IconPort } from "@paperboat/shared";
+import { type ConnectorDef, type Connectors, type IconDef, type IconPort } from "@paperboatlab/ui/canvas";
 import type { OmcCalls } from "../omc/omc.ts";
 
 export type ClassLook = { icon?: IconDef; connectors: Connectors; connector?: boolean };

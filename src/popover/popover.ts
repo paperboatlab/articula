@@ -1,4 +1,4 @@
-import type { Connectors, IconPort } from "@paperboat/shared";
+import { type Connectors, type IconPort } from "@paperboatlab/ui/canvas";
 import type { ComponentInst, StudioApi, StudioModel } from "../model/types.ts";
 
 function parseNumber(text: string): number | undefined {

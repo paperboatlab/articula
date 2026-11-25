@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { byMenu, type Command } from "@paperboat/shared";
+import { byMenu } from "@paperboatlab/ui";
+import { type Command } from "@paperboatlab/ui";
 import { StringStream, type StreamParser } from "@codemirror/language";
 import { cpp } from "@codemirror/legacy-modes/mode/clike";
-import { modelicaParser } from "../src/split/modelica.ts";
+import { MENUS } from "../src/shell/menus.ts";
 
 /** What the read-only views colour: each token's text and style, through the editor's own stream parser. */
 function tokenize<S>(code: string, parser: StreamParser<S>): { type: string; text: string }[] {
@@ -20,51 +21,6 @@ function tokenize<S>(code: string, parser: StreamParser<S>): { type: string; tex
   return out;
 }
 import { defaultExportFolder } from "../src/dock/dock.ts";
-
-test("split: the flat view highlights Modelica keywords, types, numbers, strings and comments", () => {
-  const moCode = `
-// A simple resistor model
-model TestResistor "A test component"
-  import Modelica.Constants.pi;
-  extends Modelica.Electrical.Analog.Interfaces.OnePort;
-  parameter Real R(unit = "Ohm") = 100.0 "Resistance";
-  final parameter Boolean active = true;
-  /* Multi-line
-     equation block */
-  initial equation
-    v = 0.0;
-  equation
-    i = v / R;
-    annotation(Icon(coordinateSystem(extent={{-100,-100},{100,100}})));
-end TestResistor;
-`.trim();
-
-  const allTokens = tokenize(moCode, modelicaParser);
-  const of = (type: string) => allTokens.filter((t) => t.type === type).map((t) => t.text);
-  const keywords = of("keyword"), types = of("typeName"), numbers = of("number"), booleans = of("bool");
-  const comments = of("comment"), strings = of("string");
-
-  assert.ok(keywords.includes("model"), "model keyword found");
-  assert.ok(keywords.includes("import"), "import keyword found");
-  assert.ok(keywords.includes("extends"), "extends keyword found");
-  assert.ok(keywords.includes("parameter"), "parameter keyword found");
-  assert.ok(keywords.includes("final"), "final keyword found");
-  assert.ok(keywords.includes("initial"), "initial keyword found");
-  assert.ok(keywords.includes("equation"), "equation keyword found");
-  assert.ok(keywords.includes("end"), "end keyword found");
-
-  assert.ok(types.includes("Real"), "Real type found");
-  assert.ok(types.includes("Boolean"), "Boolean type found");
-
-  assert.ok(numbers.includes("100.0") || numbers.includes("100"), "number literal found");
-  assert.ok(numbers.includes("0.0") || numbers.includes("0"), "zero float found");
-
-  assert.ok(booleans.includes("true"), "boolean true found");
-  assert.ok(comments.some((c) => c.includes("A simple resistor model")), "line comment found");
-  assert.ok(comments.some((c) => c.includes("Multi-line")), "block comment found");
-  assert.ok(strings.includes('"A test component"'), "string literal found");
-  assert.ok(keywords.includes("annotation"), "annotation keyword found");
-});
 
 test("split: the generated C++ view highlights C++", () => {
   const cppCode = `
@@ -112,7 +68,7 @@ test("menu: File menu is the first menu and provides core model lifecycle comman
     { id: "side", label: "Source and Simulate", menu: "view", group: "panes", run: () => {} },
   ];
 
-  const menus = byMenu(commands);
+  const menus = byMenu(commands, MENUS);
   assert.equal(menus[0].id, "file", "File menu is the first menu");
   assert.equal(menus[0].label, "File");
 

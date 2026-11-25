@@ -2,7 +2,7 @@
 // model in localStorage. An export carries the choice into the station as far as the FMU allows:
 // its solver is CVODE, or Euler when Euler was picked.
 
-import type { SolverInfo, SolverOptionInfo } from "@paperboat/shared/components";
+import { type SolverInfo, type SolverOptionInfo } from "./SolverSettings.tsx";
 
 export type SolverChoice = { method: string; tolerance?: number; intervals?: number; start?: number };
 

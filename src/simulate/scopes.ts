@@ -2,7 +2,7 @@
 // the shared layout engine, its channels kept in the instrument's settings; labels, separators,
 // sections and tabs are the engine's decorations and tabs. Pure, so a test can drive it.
 
-import { arrange, type Arranged, type BoardLayout, type PlacedLayout } from "@paperboat/shared";
+import { arrange, type Arranged, type BoardLayout, type Placed as PlacedLayout } from "./board.ts";
 
 /** The side pane is narrow: two columns, a scope is a half (S), a row (M) or a square (L). */
 export const COLUMNS = 2;

@@ -3,7 +3,7 @@
 // the environment, the OpenModelica package index the registry. The server's `packages` op runs
 // OpenModelica's own package manager (installPackage, upgradeInstalledPackages) through omc.
 import { useEffect, useState } from "react";
-import { PackagePanel, type RegistryItem } from "@paperboat/shared/packages";
+import { PackagePanel, type RegistryItem } from "@paperboatlab/ui/packages";
 import type { OmcCalls } from "../omc/omc.ts";
 
 type Status = { version: string; path: string; libraries: { name: string; versions: string[] }[] };

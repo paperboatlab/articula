@@ -1,18 +1,29 @@
 {
-  "name": "squero-studio-om",
+  "name": "articula",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.1.0",
+  "description": "Paperboat Articula: acausal modelling, an OpenModelica editor",
   "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paperboatlab/articula.git"
+  },
   "type": "module",
+  "bin": {
+    "articula": "bin/articula"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "build:server": "cmake -S server -B server/build -G Ninja && cmake --build server/build",
+    "build": "node scripts/build.ts",
+    "dev": "node scripts/build.ts --watch",
+    "build:server": "cmake -S server -B server/build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build server/build",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.ts",
-    "test:server": "server/build/squero_tests"
+    "test:server": "server/build/articula_tests"
   },
-  "dependencies": {
+  "devDependencies": {
     "@codemirror/autocomplete": "^6.20.4",
     "@codemirror/commands": "^6.11.1",
     "@codemirror/language": "^6.13.1",
@@ -22,24 +33,17 @@
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.15",
     "@lezer/highlight": "^1.2.5",
-    "@paperboat/shared": "file:../paperboat-shared",
-    "@xyflow/react": "^12.12.1",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1",
-    "three": "^0.187.0",
-    "uplot": "^1.6.32"
-  },
-  "devDependencies": {
+    "@paperboatlab/ui": "github:paperboatlab/paperboat-ui#787961b39fa1ad708527e065db639b320342e998",
     "@types/node": "^22.19.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.187.0",
-    "@vitejs/plugin-react": "^6.2.1",
+    "@xyflow/react": "^12.12.1",
+    "esbuild": "^0.25.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.187.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.5"
-  },
-  "description": "Squero Studio: OpenModelica. Acausal Modelica editor that exports Paperboat C++ stations.",
-  "bin": {
-    "squero-om": "bin/squero-om"
+    "uplot": "^1.6.32"
   }
 }

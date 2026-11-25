@@ -1,5 +1,5 @@
 // A compact side picker for a pin: four words in a select, not a wide switch row.
-import type { IconPort } from "@paperboat/shared";
+import { type IconPort } from "@paperboatlab/ui/canvas";
 import { SIDE_OPTIONS } from "./look.ts";
 
 export function SideSelect({ value, onChange, label }: { value: IconPort["side"]; onChange: (side: IconPort["side"]) => void; label: string }) {

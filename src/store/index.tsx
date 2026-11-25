@@ -4,8 +4,8 @@
 
 import type { Shape } from "../viewport3d/shapes.ts";
 import { fmuSolver, loadSolver, type SolverChoice } from "../simulate/solver.ts";
-import { useUndo, type IconDef } from "@paperboat/shared";
-import type { Message } from "@paperboat/shared/components";
+import { useUndo, type IconDef } from "@paperboatlab/ui/canvas";
+import { type Message } from "@paperboatlab/ui";
 import type { Edge, Node } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Connection, ExportMode, ExportProgress, ExportResult, Placement, StudioApi, StudioModel } from "../model/types.ts";

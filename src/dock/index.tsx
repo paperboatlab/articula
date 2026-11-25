@@ -175,15 +175,6 @@ export function StudioDock({
         ? `started on :${running.port}, waiting for it to answer…`
         : `ready: connect Paperboat to ws://localhost:${running.port}`;
 
-  const handleStop = async () => {
-    if (!running || busy) return;
-    setBusy(true);
-    const res = await runStationExport(api, "stop", () => {}, running.port);
-    setOutcome(res);
-    if (res.ok) setRunning(null);
-    setBusy(false);
-  };
-
   return (
     <div className="studio-dock" role="region" aria-label="Model balance and export" data-own-keys>
       {progress && (
@@ -243,20 +234,7 @@ export function StudioDock({
           >
             Download .pst
           </button>
-          <button
-            type="button"
-            className="studio-dock-export-key"
-            disabled={!isBalanced || busy || !canExport}
-            title={!canExport ? why : isBalanced ? "Start the station as ssom_<model> on a free port" : balance.words}
-            onClick={() => void handleExport("serve")}
-          >
-            {running ? "Restart" : "Start"} station
-          </button>
-          {running && (
-            <button type="button" className="studio-dock-export-key" disabled={busy} onClick={() => void handleStop()}>
-              Stop :{running.port}
-            </button>
-          )}
+          {/* ponytail: "Start station" ran the legacy engine; it returns with Simplicial on the new platform */}
         </div>
       </div>
 

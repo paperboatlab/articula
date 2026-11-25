@@ -1,25 +1,25 @@
-// Simulate (contracts §8.2): a local check, not a second Flow page. Scopes on Paperboat's board
-// grid (#7), each plotting the channels picked in its dropdown, and Paperboat's floating run dock.
-// omc runs it; nothing leaves Studio and no block, board or station is involved.
+// Simulate: a run with omc in the workspace's session (Ctrl R, or the bar's Simulate), its setup in one
+// row (stop time, the solver), a plot of the variables checked, and the variables browser (OMEdit's,
+// with a filter, grouped by component, each with its final value).
 
-import { addDecoration, addTab, editDecoration, freshTabName, loadSaved, moveDecoration, moveInstrument, moveToTab, removeDecoration, removeTab, renameTab, resizeInstrument, rowsOf, save as saveLayout, setSettings, SIZE_LABEL, tabIsEmpty, type BoardLayout } from "./board.ts";
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
-import { createPortal } from "react-dom";
-import { Dock, NumberField } from "@paperboatlab/ui";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { Key, NumberField, Spinner, readStored, writeStored } from "@paperboatlab/ui";
+import { Plot2D, type PlotAxes } from "@paperboatlab/ui/plot";
 import { SolverSettings } from "./SolverSettings.tsx";
-import { Scope, type ScopeChannel, type ScopeSettings } from "@paperboatlab/ui/scope";
 import { DEFAULTS, loadSolver, OPTIONS, saveSolver, SOLVERS, summary, type SolverChoice } from "./solver.ts";
 import type { StudioModel } from "../model/types.ts";
 import type { Actions, Stimulus } from "../store/index.tsx";
 import { explainOmcError } from "../dock/dock.ts";
-import { addScope, arrangeScopes, picksOf, removeScope, START } from "./scopes.ts";
+
+const PLOT_AXES: PlotAxes = { xlabel: { text: "time (s)" }, grid: true, legend: { show: true } };
+const isList = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
 
 type Run = Awaited<ReturnType<Actions["simulate"]>>;
 
 /** The variables worth plotting first: not derivatives, fewest dots, a few of them. */
 export function defaultPicks(names: string[], limit = 3): string[] {
   return [...names]
-    .filter((n) => !n.startsWith("der("))
+    .filter((n) => n !== "time" && !n.startsWith("der("))
     .sort((a, b) => a.split(".").length - b.split(".").length || a.localeCompare(b))
     .slice(0, limit);
 }
@@ -71,35 +71,50 @@ function Stimuli({ inputs, value, onChange }: { inputs: string[]; value: Record<
   );
 }
 
-/** The channel picker: a dropdown with a filter, each variable a checkbox in its trace colour. */
-function Channels({ names, picks, onChange }: { names: string[]; picks: string[]; onChange: (picks: string[]) => void }) {
+/** Where a variable lives: its first path segment groups it ("R1.v" under R1; "time" alone). */
+const groupOf = (n: string) => (n.startsWith("der(") ? n.slice(4).split(".")[0] : n.includes(".") ? n.slice(0, n.indexOf(".")) : "");
+const fmt = (v: number | null | undefined) => (v === null || v === undefined || !Number.isFinite(v) ? "–" : Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 1e-3) ? v.toExponential(3) : String(+v.toPrecision(5)));
+
+/** The variables browser (OMEdit's, with a filter): every result variable grouped by its component,
+ *  a check plots it, its final value at the end. */
+function Variables({ run, picks, onPicks }: { run: Run | null; picks: string[]; onPicks: (p: string[]) => void }) {
   const [filter, setFilter] = useState("");
-  const shown = names.filter((n) => n.toLowerCase().includes(filter.toLowerCase()));
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  if (!run) return <p className="vars-none">Simulate (Ctrl R) to see the variables.</p>;
+  const words = filter.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = run.names.filter((n) => n !== "time" && words.every((w) => n.toLowerCase().includes(w)));
+  const groups = new Map<string, string[]>();
+  for (const n of shown) groups.set(groupOf(n), [...(groups.get(groupOf(n)) ?? []), n]);
+  const last = (n: string) => { const v = run.series[n]; return v?.[v.length - 1]; };
+  const row = (n: string, nested: boolean) => {
+    const i = picks.indexOf(n);
+    return (
+      <label key={n} className={`var${nested ? " nested" : ""}`} title={n} style={i >= 0 ? ({ "--trace": `var(--series-${(i % 6) + 1})` } as CSSProperties) : undefined}>
+        <input type="checkbox" checked={i >= 0} onChange={() => onPicks(i >= 0 ? picks.filter((x) => x !== n) : [...picks, n])} />
+        <span className="vn">{nested ? n.slice(groupOf(n).length + 1) || n : n}</span>
+        <span className="vv">{fmt(last(n))}</span>
+      </label>
+    );
+  };
   return (
-    <details className="channels">
-      <summary className="key small" title="Pick the channels this scope plots">
-        {picks.length ? `${picks.length} channel${picks.length > 1 ? "s" : ""}` : "channels"} ▾
-      </summary>
-      <div className="channels-pop" role="group" aria-label="Channels">
-        <input className="well" placeholder="filter…" aria-label="Filter channels" value={filter} autoFocus onChange={(e) => setFilter(e.target.value)} />
-        {names.length === 0 && <span className="lbl">Simulate first</span>}
-        {shown.map((n) => {
-          const i = picks.indexOf(n);
-          return (
-            <label key={n} className="channel" title={n} style={i >= 0 ? ({ "--trace": `var(--trace-${(i % 8) + 1})` } as CSSProperties) : undefined}>
-              <input type="checkbox" checked={i >= 0} onChange={() => onChange(i >= 0 ? picks.filter((x) => x !== n) : [...picks, n])} />
-              <span>{n}</span>
-            </label>
-          );
-        })}
+    <div className="vars">
+      <label className="well vars-find"><input placeholder={`Filter ${run.names.length - 1} variables`} value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter variables" /></label>
+      <div className="vars-list" role="group" aria-label="Variables">
+        {[...groups].map(([g, names]) => !g || names.length === 1 && names[0] === g
+          ? names.map((n) => row(n, false))
+          : (
+            <div key={g} className="vgroup">
+              <button type="button" className="vgh" aria-expanded={words.length > 0 || open.has(g)} onClick={() => setOpen((o) => { const x = new Set(o); x.has(g) ? x.delete(g) : x.add(g); return x; })}>
+                <span className="caret">{words.length > 0 || open.has(g) ? "▾" : "▸"}</span>{g}<small>{names.filter((n) => picks.includes(n)).length || ""}</small><small className="vc">{names.length}</small>
+              </button>
+              {(words.length > 0 || open.has(g)) && names.map((n) => row(n, true))}
+            </div>
+          ))}
+        {!shown.length && <p className="vars-none">No variable matches.</p>}
       </div>
-    </details>
+    </div>
   );
 }
-
-const SCOPE_DRAG = "application/x-squero-scope";
-const ROW = 110; // px a grid row
-const GAP = 8;
 
 type Phase = { state: "idle" } | { state: "running"; since: number; stage: string } | { state: "done"; ms: number } | { state: "failed" } | { state: "cancelled" };
 
@@ -134,22 +149,11 @@ export function Simulate({
   const [now, setNow] = useState(0);
   const [error, setError] = useState("");
   const ticket = useRef(0);
-  const key = `squero-scopes:${model.name}`;
-  const [layout, setLayout] = useState<BoardLayout>(() => loadSaved(key) ?? START);
-  useEffect(() => setLayout(loadSaved(key) ?? START), [key]);
-  const [tab, setTab] = useState("");
-  const a = arrangeScopes(layout);
-  const page = a.tabs.length ? (a.tabs.includes(tab) ? tab : a.tabs[0]) : "";
-  const gridRef = useRef<HTMLDivElement>(null);
-  // The run dock floats at the bottom middle of the stage, as in Paperboat: portal it there.
-  const [canvas, setCanvas] = useState<Element | null>(null);
-  useLayoutEffect(() => setCanvas(document.querySelector(".studio .stage-view")), []);
-
-  const edit = (next: BoardLayout) => {
-    setLayout(next);
-    saveLayout(key, next);
-  };
-  const setPicks = (block: string, picks: string[]) => edit(setSettings(a, block, { picks }));
+  // what is plotted, kept per model
+  const key = `articula.plot:${model.name}`;
+  const [picks, setPicksState] = useState<string[]>(() => readStored(key, isList) ?? []);
+  useEffect(() => setPicksState(readStored(key, isList) ?? []), [key]);
+  const setPicks = (p: string[]) => (setPicksState(p), writeStored(key, p));
 
   useEffect(() => {
     onRunningChange?.(phase.state === "running");
@@ -178,9 +182,8 @@ export function Simulate({
       setRunVersion((v) => v + 1);
       onRun?.(result);
       setPhase({ state: "done", ms: Date.now() - since });
-      // a first run fills the first empty scope, so there is something to look at
-      const first = a.instruments.find((p) => picksOf(p).length === 0);
-      if (first && a.instruments.every((p) => picksOf(p).filter((n) => result.names.includes(n)).length === 0)) setPicks(first.block, defaultPicks(result.names));
+      // a first run plots a few variables, so there is something to look at
+      if (!picks.some((n) => result.names.includes(n))) setPicks(defaultPicks(result.names));
     } catch (e) {
       if (mine !== ticket.current) return;
       setError(explainOmcError((e as Error).message));
@@ -216,12 +219,6 @@ export function Simulate({
     };
   }, []);
 
-  const cell = (e: DragEvent): [number, number] => {
-    const box = gridRef.current!.getBoundingClientRect();
-    return [Math.floor(((e.clientX - box.left) / box.width) * a.columns), Math.floor((e.clientY - box.top) / (ROW + GAP))];
-  };
-  const area = (p: { col: number; row: number; w: number; h: number }): CSSProperties => ({ gridColumn: `${p.col + 1} / span ${p.w}`, gridRow: `${p.row + 1} / span ${p.h}` });
-  const rows = Math.max(1, rowsOf(a, page));
   const status =
     phase.state === "running" ? `${phase.stage}… ${((now - phase.since) / 1000).toFixed(1)} s`
     : phase.state === "done" ? `completed in ${phase.ms} ms`
@@ -229,184 +226,31 @@ export function Simulate({
     : phase.state === "cancelled" ? "cancelled"
     : "";
 
+  const plotted = run ? picks.filter((n) => run.names.includes(n)) : [];
   return (
     <section className="simulate" aria-label="Simulate">
+      <div className="sim-setup" role="toolbar" aria-label="Simulation setup">
+        <label className="well sim-stop" title="Stop time"><span>stop</span><input value={stop} inputMode="decimal" aria-label="Stop time" onChange={(e) => setStop(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void go()} /><span>s</span></label>
+        <span className="popw">
+          <Key size="sm" title="Solver settings" aria-expanded={solverOpen} onClick={() => setSolverOpen(!solverOpen)}>{summary(solver)}</Key>
+          {solverOpen && (
+            <SolverSettings intro="omc's integrator for this model; kept with the model." solvers={SOLVERS} options={OPTIONS} solver={solver.method}
+              values={{ tolerance: solver.tolerance, intervals: solver.intervals, start: solver.start }} defaults={DEFAULTS}
+              onSolver={(method) => setSolver({ ...solver, method })} onOption={(k, v) => setSolver({ ...solver, [k]: v })}
+              onReset={() => setSolver({ method: "dassl" })} onClose={() => setSolverOpen(false)} />
+          )}
+        </span>
+        <span className={`sim-status${phase.state === "failed" ? " bad" : ""}`} role="status">{phase.state === "running" && <Spinner size={12} />}{status}</span>
+      </div>
       <Stimuli inputs={inputs} value={stimuli} onChange={setStimuli} />
-      {warnings.map((w) => (
-        <p key={w} className="warning" role="status">
-          {w}
-        </p>
-      ))}
-      {error && <p className="error" role="alert">{error}</p>}
-      <div className="scope-tools" role="toolbar" aria-label="Scopes">
-        {a.tabs.length > 0 && (
-          <div className="scope-tabs" role="tablist">
-            {a.tabs.map((t) => (
-              <span key={t} className={`scope-tab${t === page ? " on" : ""}`}>
-                <button
-                  role="tab"
-                  aria-selected={t === page}
-                  title="Double-click to rename"
-                  onClick={() => setTab(t)}
-                  onDoubleClick={() => {
-                    const to = prompt("Tab name", t)?.trim();
-                    if (to) edit(renameTab(a, t, to)), setTab(to);
-                  }}
-                >
-                  {t}
-                </button>
-                {tabIsEmpty(a, t) && (
-                  <button className="scope-x" title={`Remove ${t}`} onClick={() => edit(removeTab(a, t))}>
-                    ×
-                  </button>
-                )}
-              </span>
-            ))}
-          </div>
-        )}
-        <button className="key small" onClick={() => edit(addScope(layout, page))}>+ Scope</button>
-        <button className="key small" onClick={() => edit(addDecoration(a, "label", page))}>+ Label</button>
-        <button className="key small" onClick={() => edit(addDecoration(a, "hline", page))}>+ Separator</button>
-        <button className="key small" onClick={() => edit(addDecoration(a, "section", page))}>+ Section</button>
-        <button
-          className="key small"
-          onClick={() => {
-            const name = freshTabName(a.tabs.length ? a.tabs : ["Main"]);
-            edit(addTab(a, name));
-            setTab(name);
-          }}
-        >
-          + Tab
-        </button>
+      {warnings.map((w) => <p key={w} className="sim-note" role="status">{w}</p>)}
+      {error && <p className="sim-note bad" role="alert">{error}</p>}
+      <div className="sim-plot">
+        {plotted.length
+          ? <Plot2D key={runVersion} series={plotted.map((n) => ({ x: run!.t, y: run!.series[n].map((v) => v ?? Number.NaN), label: n }))} axes={PLOT_AXES} />
+          : <p className="vars-none">{run ? "Check a variable below to plot it." : "Plots appear here after a run."}</p>}
       </div>
-      <div
-        ref={gridRef}
-        className="scope-grid"
-        style={{ gridTemplateColumns: `repeat(${a.columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, ${ROW}px)`, gap: GAP }}
-        onDragOver={(e) => e.dataTransfer.types.includes(SCOPE_DRAG) && e.preventDefault()}
-        onDrop={(e) => {
-          const what = e.dataTransfer.getData(SCOPE_DRAG);
-          if (!what) return;
-          e.preventDefault();
-          const [col, row] = cell(e);
-          edit(what.startsWith("deco:") ? moveDecoration(a, Number(what.slice(5)), col, row) : moveInstrument(a, what, col, row));
-        }}
-      >
-        {a.decorations
-          .filter((d) => d.tab === page && !d.hidden)
-          .map((d) => (
-            <div
-              key={`d${d.index}`}
-              className={`scope-deco deco-${d.kind}`}
-              style={d.kind === "hline" ? { gridColumn: `${d.col + 1} / span ${d.w}`, gridRow: `${d.row + 1}` } : area(d)}
-              draggable={d.kind !== "section"}
-              onDragStart={(e) => e.dataTransfer.setData(SCOPE_DRAG, `deco:${d.index}`)}
-            >
-              {d.kind !== "hline" && (
-                <input
-                  className="deco-text"
-                  aria-label={d.kind === "label" ? "Label" : "Section title"}
-                  defaultValue={d.text}
-                  key={d.text}
-                  onBlur={(e) => e.target.value !== d.text && edit(editDecoration(a, d.index, { text: e.target.value }))}
-                />
-              )}
-              <button className="scope-x" title="Remove" onClick={() => edit(removeDecoration(a, d.index))}>
-                ×
-              </button>
-            </div>
-          ))}
-        {a.instruments
-          .filter((p) => p.tab === page)
-          .map((p) => {
-            const picks = picksOf(p).filter((n) => !run || run.names.includes(n));
-            const channels: ScopeChannel[] = picks.map((name) => ({
-              id: name,
-              label: name,
-              buf: { times: run?.t ?? [], values: (run?.series[name] ?? []).map((v) => v ?? Number.NaN) },
-            }));
-            const settings = (p.settings ?? {}) as ScopeSettings;
-            return (
-              <article key={p.block} className="scope-cell" style={area(p)} aria-label={p.block}>
-                <header draggable onDragStart={(e) => e.dataTransfer.setData(SCOPE_DRAG, p.block)} title="Drag to move">
-                  <span className="lbl">{p.block}</span>
-                  <Channels names={run?.names ?? []} picks={picks} onChange={(next) => setPicks(p.block, next)} />
-                  <span className="scope-sizes" role="group" aria-label="Size">
-                    {(["compact", "normal", "large"] as const).map((s) => (
-                      <button key={s} className={`scope-size${p.size === s ? " on" : ""}`} aria-pressed={p.size === s} onClick={() => edit(resizeInstrument(a, p.block, s))}>
-                        {SIZE_LABEL[s]}
-                      </button>
-                    ))}
-                  </span>
-                  {a.tabs.length > 1 && (
-                    <select className="well scope-move" aria-label={`Tab of ${p.block}`} value={p.tab} onChange={(e) => edit(moveToTab(a, p.block, e.target.value))}>
-                      {a.tabs.map((t) => (
-                        <option key={t}>{t}</option>
-                      ))}
-                    </select>
-                  )}
-                  <button className="scope-x" title={`Remove ${p.block}`} onClick={() => edit(removeScope(layout, p.block))}>
-                    ×
-                  </button>
-                </header>
-                <Scope
-                  name={p.block}
-                  channels={channels}
-                  version={runVersion}
-                  live={false}
-                  settings={settings}
-                  onSettings={(next) => edit(setSettings(a, p.block, { ...settings, ...next }))}
-                  small={p.size !== "large"}
-                  placeholder={run ? "Pick channels ▾" : "Simulate to see signals"}
-                />
-              </article>
-            );
-          })}
-      </div>
-      {canvas &&
-        createPortal(
-      <Dock
-        canRun={phase.state !== "running"}
-        whyNot="simulating"
-        running={phase.state === "running"}
-        status={phase.state === "idle" ? undefined : phase.state === "running" ? "running" : phase.state === "failed" ? "failed" : "done"}
-        statusText={status}
-        optionsSlot={
-          <>
-          <label className="dock-stop">
-            <span className="lbl">stop</span>
-            <input className="well" inputMode="decimal" aria-label="Stop time (s)" value={stop} onChange={(e) => setStop(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void go()} />
-            <span className="lbl">s</span>
-          </label>
-          <label className="dock-stop">
-            <span className="lbl">solver</span>
-            <button className="key small dock-solver" title="Solver settings (Run ▸ Solver settings…): the method omc runs and its options" onClick={() => setSolverOpen(true)}>
-              {summary(solver)} ▾
-            </button>
-          </label>
-          </>
-        }
-        onRun={() => void go()}
-        onCancel={cancel}
-      />,
-          canvas,
-        )}
-      {solverOpen &&
-        createPortal(
-          <SolverSettings
-            intro="How omc runs this model's Simulate. An export keeps it as far as an FMU can: CVODE, or Euler if picked."
-            solvers={SOLVERS}
-            options={OPTIONS}
-            solver={solver.method}
-            values={solver as unknown as Record<string, number | undefined>}
-            defaults={DEFAULTS}
-            onSolver={(method) => setSolver({ ...solver, method })}
-            onOption={(k, v) => setSolver({ ...solver, [k]: v })}
-            onReset={() => setSolver({ method: "dassl" })}
-            onClose={() => setSolverOpen(false)}
-          />,
-          document.body,
-        )}
+      <Variables run={run} picks={picks} onPicks={setPicks} />
     </section>
   );
 }

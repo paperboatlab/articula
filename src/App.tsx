@@ -770,7 +770,6 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                     docs={docs}
                     active={model.file}
                     dirty={actions.dirty || textDirty}
-                    meta={workspace?.root}
                     onSelect={(doc) => void openDocument(doc.file)}
                     onClose={(doc) => void closeDocument(doc)}
                     onOpen={() => fileInputRef.current?.click()}
@@ -832,7 +831,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                 onCheck={() => void runCheck()}
               />
             </div>
-            <Panel name="Simulate" side="right" icon="play" width={420} hidden={hidden.r} onHidden={(h) => toggle("r", h)} className={`side focus-${focus}`}
+            <Panel name="Simulate" side="right" icon="play" width={420} hidden={hidden.r} onHidden={(h) => toggle("r", h)} className={`simside focus-${focus}`}
               head={<Segmented<Focus> label="Focus" value={focus} onChange={setFocus} options={[
                 { value: "code", label: "Source", hint: "The source fills the card" },
                 { value: "split", label: "Both", hint: "Source above, plots below" },

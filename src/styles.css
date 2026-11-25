@@ -42,8 +42,6 @@ body { background: var(--surface-ground); color: var(--text); font: 13px/1.45 va
 .cons .cons-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .cons .cons-body > * { flex: 1; min-height: 0; }
 
-/* the right card: the source over Simulate's plots */
-.panel.side { display: flex; flex-direction: column; overflow: hidden; }
 
 /* the runtimes key and its peek (as Julix's) */
 .popw { position: relative; }
@@ -75,25 +73,6 @@ body { background: var(--surface-ground); color: var(--text); font: 13px/1.45 va
 .lib-quick-item { all: unset; display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; border-radius: var(--radius-md); cursor: pointer; }
 .lib-quick-item:hover { background: var(--surface-sunken); }
 
-/* ---- Document tabs above the stage (#43) -------------------------------------------- */
-.docbar { display: flex; align-items: flex-end; gap: 2px; min-height: 31px; border-bottom: 1px solid var(--line); }
-.doc-tab {
-  display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 8px 0 10px;
-  min-width: 0; max-width: 270px;
-  border: 1px solid var(--line); border-bottom: 0;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-  background: var(--surface-panel); color: var(--text-muted);
-}
-.doc-tab.on { background: var(--surface-raised); color: var(--text); }
-.doc-pick { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: none; padding: 0; color: inherit; font: 400 var(--size-xs) var(--font-mono); cursor: pointer; }
-.doc-tab.on .doc-pick { font-weight: 500; }
-.doc-tab .dirty { width: 5px; height: 5px; border-radius: 50%; background: var(--signal); }
-.doc-tab .x { border: 0; background: none; padding: 0 2px; color: inherit; opacity: .45; font: 400 var(--size-sm) var(--font-mono); cursor: pointer; }
-.doc-tab .x:hover { opacity: 1; }
-.doc-tab .x:disabled { opacity: .15; cursor: default; }
-.doc-add { height: 30px; border: 0; background: none; padding: 0 9px; color: var(--text-muted); font: 400 15px var(--font-mono); cursor: pointer; }
-.doc-add:hover { color: var(--text); }
-.docbar .stage-meta { margin-left: auto; padding: 0 2px 7px 8px; }
 
 /* The stage's Text view: the .mo, read-only for now. The floating Run dock is a diagram control,
    so it steps aside while the code is being read. */
@@ -555,13 +534,7 @@ body.dragging-card .library {
 .quick-foot.refused { color: var(--danger); font-family: var(--font-sans); }
 
 /* Split view and Simulate */
-.side { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-.split, .simulate { display: flex; flex-direction: column; min-height: 0; background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
 /* Focus changes slide: the panes trade flex-grow (a hidden one shrinks to nothing and fades). */
-.split, .simulate { transition: flex-grow var(--slide), opacity var(--slide), margin var(--slide); }
-.split { flex: 55 1 0; }
-.simulate { flex: 45 1 0; overflow: auto; margin-top: var(--gutter); }
-.split > header, .simulate > header { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); min-height: var(--panel-head-height); }
 /* ---- Syntax Highlighting & Code View (#6) ------------------------------------------- */
 /* A read-only view is the shared editor (CodeView.tsx): it scrolls and draws itself. */
 .code-view { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--surface-screen); }
@@ -581,52 +554,12 @@ body.dragging-card .library {
 .console-count.bad { color: var(--danger); }
 .console-foot { display: flex; align-items: center; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--line); font: 400 var(--size-2xs) var(--font-sans); color: var(--text-muted); }
 
-.simulate .well { width: 72px; height: 28px; border: 0; background: var(--surface-well); box-shadow: var(--well-shadow); border-radius: var(--radius-md); padding: 0 var(--space-2); }
-.simulate .error { margin: 0; padding: var(--space-2) var(--space-3); color: var(--danger); font-size: var(--size-xs); white-space: pre-wrap; }
-.simulate .warning { margin: 0; padding: var(--space-1) var(--space-3); color: var(--danger); font-size: var(--size-xs); }
-.stimuli { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-1) var(--space-3); }
-.stimulus { display: flex; align-items: center; gap: var(--space-2); }
-.stimulus .lbl.mono { min-width: 32px; font-family: var(--font-mono); }
-.stimulus select.well { width: 88px; }
 .plot { padding: var(--space-2) var(--space-3) 0; min-height: 190px; }
 .plot .u-wrap, .plot .uplot { background: transparent; }
 
 /* Focus: code, both, or scopes fill the side pane (#7). Hidden, not unmounted: a run survives. */
-.side.focus-code > .simulate, .side.focus-scopes > .split { flex-grow: 0; opacity: 0; pointer-events: none; border-width: 0; margin: 0; }
-.side.focus-scopes > .simulate { margin-top: 0; }
 
 /* Scopes on the board grid, and Paperboat's floating run dock (#7). */
-.simulate { position: relative; display: flex; flex-direction: column; }
-.scope-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: var(--space-2) var(--space-3); }
-.scope-tabs { display: flex; gap: 2px; margin-right: auto; }
-.scope-tab { display: inline-flex; align-items: center; }
-.scope-tab button[role="tab"] { border: 0; background: none; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); padding: 2px 6px; }
-.scope-tab.on button[role="tab"] { color: var(--text); font-weight: 600; box-shadow: inset 0 -2px 0 var(--line-ink); }
-.scope-grid { display: grid; padding: 0 var(--space-3) 72px; position: relative; }
-.scope-cell { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); z-index: 1; }
-.scope-cell > .instrument.scope { display: flex; flex-direction: column; flex: 1; min-height: 0; border: 0; border-radius: 0; background: transparent; }
-.scope-cell > .instrument.scope .screen { flex: 1; min-height: 0; }
-.scope-cell > header { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border-bottom: 1px solid var(--line); cursor: grab; }
-.scope-cell > header .lbl { margin-right: auto; font: 500 var(--size-2xs) var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.scope-cell .plot { flex: 1; min-height: 0; padding: 4px 4px 0; }
-.scope-empty { margin: auto; font-size: var(--size-2xs); color: var(--text-muted); }
-.scope-sizes { display: inline-flex; }
-.scope-size { border: 0; background: none; padding: 0 3px; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); }
-.scope-size.on { color: var(--text); font-weight: 600; }
-.scope-x { border: 0; background: none; padding: 0 3px; color: var(--text-muted); cursor: pointer; }
-.scope-move { width: auto !important; height: 20px !important; font-size: var(--size-2xs); }
-.channels { position: relative; }
-.channels > summary { list-style: none; cursor: pointer; font-size: var(--size-2xs); padding: 0 6px; }
-.channels > summary::-webkit-details-marker { display: none; }
-.channels-pop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 8; display: flex; flex-direction: column; gap: 2px; min-width: 180px; max-width: min(360px, calc(var(--side-w) - 48px)); max-height: 240px; overflow-y: auto; overflow-x: hidden; padding: var(--space-2); background: var(--surface-float); backdrop-filter: var(--float-blur); border: 1px solid var(--line-strong); border-radius: var(--radius-md); }
-.channels-pop .channel { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
-.channels-pop .channel > span { overflow: hidden; text-overflow: ellipsis; }
-.channels-pop .well { width: 100% !important; height: 24px !important; margin-bottom: 4px; }
-.channel { display: flex; align-items: center; gap: 6px; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); white-space: nowrap; box-shadow: inset 3px 0 0 var(--trace, transparent); padding-left: 6px; }
-.channel:has(input:checked) { color: var(--text); }
-.scope-deco { display: flex; align-items: flex-start; min-width: 0; }
-.scope-deco .scope-x { opacity: 0; }
-.scope-deco:hover .scope-x { opacity: 1; }
 .deco-label { align-items: center; cursor: grab; }
 .deco-hline { align-self: start; height: 0; margin-top: -4px; border-top: 1px solid var(--line-strong); justify-content: flex-end; cursor: grab; }
 .deco-hline .scope-x { margin-top: -10px; }
@@ -699,3 +632,50 @@ body.dragging-card .library {
 .viewport3d-scrub { flex: 1; min-width: 60px; }
 
 /* The bar's menus and the About title sit as one row, the same 2px apart. */
+
+/* ---- tabs above the stage (as Julix's) ---- */
+.tabs2 { display: flex; align-items: center; gap: 2px; overflow: hidden; flex: 1; min-width: 0; height: 100%; }
+.tabs2 > span[role="tab"] { display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; height: 100%; color: var(--text-muted); cursor: pointer; white-space: nowrap; position: relative; font: 13px var(--font-mono); }
+.tabs2 > span[role="tab"]:hover, .tabs2 > span.on { color: var(--text); }
+.tabs2 > span.on::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); }
+.tabs2 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
+.tabs2 .tx { all: unset; width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; color: var(--text-muted); font-size: 13px; line-height: 1; cursor: pointer; }
+.tabs2 .tx:hover { background: var(--surface-sunken); color: var(--text); }
+
+/* ---- the right card: the source over Simulate (Focus: Source · Both · Plots) ---- */
+.simside .panel-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.split { display: flex; flex-direction: column; min-height: 0; flex: 50 1 0; overflow: hidden; border-bottom: 1px solid var(--line); }
+.split > header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.code-about { display: flex; align-items: center; gap: 8px; margin: 0; padding: 4px 12px 6px; font-size: 11.5px; color: var(--text-muted); }
+.code-about b { color: var(--text); font: 600 11.5px var(--font-mono); }
+.simulate { display: flex; flex-direction: column; min-height: 0; flex: 50 1 0; overflow: hidden; }
+.simside.focus-code .simulate, .simside.focus-scopes .split { display: none; }
+.sim-setup { display: flex; align-items: center; gap: 8px; padding: 8px 10px; flex: none; }
+.sim-stop { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; font: 12px var(--font-mono); color: var(--text-muted); }
+.sim-stop input { all: unset; width: 48px; font: 12.5px var(--font-mono); color: var(--text); text-align: right; }
+.sim-setup .popw > :not(.key) { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; }
+.sim-status { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font: 11.5px var(--font-mono); color: var(--text-muted); }
+.sim-status.bad, .sim-note.bad { color: var(--danger); }
+.sim-note { margin: 0; padding: 2px 12px 6px; font-size: 12px; color: var(--text-muted); white-space: pre-wrap; }
+.stimuli { display: flex; flex-direction: column; gap: 4px; padding: 0 10px 8px; }
+.stimulus { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.stimulus .lbl.mono { min-width: 32px; font-family: var(--font-mono); }
+.stimulus .well { width: 72px; height: 26px; }
+.stimulus select.well { width: 96px; }
+.sim-plot { flex: 1 1 55%; min-height: 160px; display: flex; padding: 0 10px; }
+.sim-plot > * { flex: 1; min-width: 0; }
+.vars { flex: 1 1 45%; min-height: 120px; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.vars-find { margin: 8px 10px 4px; height: 28px; display: flex; align-items: center; padding: 0 8px; }
+.vars-find input { all: unset; flex: 1; font: 12.5px var(--font-sans); color: var(--text); }
+.vars-list { flex: 1; min-height: 0; overflow: auto; padding: 2px 6px 8px; }
+.vars-none { margin: auto; padding: 16px; color: var(--text-muted); font-size: 12px; text-align: center; }
+.var { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 6px; border-radius: var(--radius-sm); font: 12px var(--font-mono); cursor: pointer; }
+.var:hover { background: var(--surface-sunken); }
+.var.nested { padding-left: 24px; }
+.var input { margin: 0; accent-color: var(--trace, var(--accent)); }
+.var .vn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.var .vv { color: var(--text-muted); font-size: 11px; }
+.vgh { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 6px; border-radius: var(--radius-sm); font: 600 12px var(--font-mono); cursor: pointer; }
+.vgh:hover { background: var(--surface-sunken); }
+.vgh .caret { width: 10px; color: var(--text-muted); font-weight: 400; }
+.vgh small { font: 400 11px var(--font-mono); color: var(--accent-text); } .vgh small.vc { margin-left: auto; color: var(--text-muted); }

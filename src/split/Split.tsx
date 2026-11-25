@@ -7,11 +7,12 @@ import type { StudioModel } from "../model/types.ts";
 import type { Actions } from "../store/index.tsx";
 import { CodeView } from "./CodeView.tsx";
 import { type EditorSettings } from "@paperboatlab/ui/editor";
+import { Segmented } from "@paperboatlab/ui";
 
 export type View = "flat" | "cpp";
 const OPTIONS: { value: View; label: string }[] = [
-  { value: "flat", label: "flat" },
-  { value: "cpp", label: "causal ODE c++" },
+  { value: "flat", label: "Flat model" },
+  { value: "cpp", label: "Causal ODE (C++)" },
 ];
 
 type Preview = Awaited<ReturnType<Actions["preview"]>>;
@@ -64,13 +65,7 @@ export function Split({
   return (
     <section className="split" aria-label="Source">
       <header>
-        <div className="switch" role="radiogroup" aria-label="Source view">
-          {OPTIONS.map((o) => (
-            <button key={o.value} role="radio" aria-checked={o.value === view} className={`opt${o.value === view ? " on" : ""}`} onClick={() => onView(o.value)}>
-              {o.label}
-            </button>
-          ))}
-        </div>
+        <Segmented<View> label="Source view" value={view} onChange={onView} options={OPTIONS} />
       </header>
       {view === "flat" ? (
         <>

@@ -1,45 +1,30 @@
-// The strip above the stage: one tab per open .mo, the active one with its dirty dot and a close
-// key, and a + that opens a file. Closing the last document is refused; the shell always has one.
-
+// The tabs above the stage: one per open model, underlined when shown (REBRAND "Tab menu" rules: middle
+// click closes, the last one stays), its dirty dot, and + to open a .mo.
+import { Key } from "@paperboatlab/ui";
 import type { Doc } from "./workspace.ts";
 
-export function DocTabs({
-  docs,
-  active,
-  dirty,
-  meta,
-  onSelect,
-  onClose,
-  onOpen,
-}: {
+export function DocTabs({ docs, active, dirty, onSelect, onClose, onOpen }: {
   docs: Doc[];
   active?: string;
   dirty?: boolean;
-  meta?: string;
   onSelect: (doc: Doc) => void;
   onClose: (doc: Doc) => void;
   onOpen: () => void;
 }) {
   return (
-    <div className="docbar" aria-label="Open documents">
+    <div className="tabs2" role="tablist" aria-label="Open models">
       {docs.map((doc) => {
         const here = doc.file === active;
         return (
-          <div key={doc.file} className={`doc-tab${here ? " on" : ""}`}>
-            <button type="button" className="doc-pick" aria-current={here ? "page" : undefined} title={doc.file} onClick={() => onSelect(doc)}>
-              {doc.name}
-            </button>
-            {here && dirty && <i className="dirty" aria-label="Unsaved changes" />}
-            <button type="button" className="x" aria-label={`Close ${doc.name}`} title={docs.length < 2 ? "The last document stays open" : `Close ${doc.name}`} disabled={docs.length < 2} onClick={() => onClose(doc)}>
-              ×
-            </button>
-          </div>
+          <span key={doc.file} role="tab" aria-selected={here} className={here ? "on" : ""} title={doc.file}
+            onClick={() => onSelect(doc)} onAuxClick={(e) => e.button === 1 && docs.length > 1 && onClose(doc)}>
+            <span className="ck ck-model">M</span>{doc.name}
+            {here && dirty && <i className="dot" title="Not saved" />}
+            {docs.length > 1 && <button type="button" className="tx" aria-label={`Close ${doc.name}`} onClick={(e) => { e.stopPropagation(); onClose(doc); }}>×</button>}
+          </span>
         );
       })}
-      <button type="button" className="doc-add" title="Open a .mo file" onClick={onOpen}>
-        +
-      </button>
-      {meta && <span className="stage-meta">{meta}</span>}
+      <Key size="sm" kind="quiet" round icon="add" label="Open a .mo file" onClick={onOpen} />
     </div>
   );
 }

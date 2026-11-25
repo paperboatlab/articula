@@ -20,7 +20,7 @@
     "dev": "node scripts/build.ts --watch",
     "build:server": "cmake -S server -B server/build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build server/build",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/*.test.ts",
+    "test": "node scripts/test.ts",
     "test:server": "server/build/articula_tests"
   },
   "devDependencies": {

@@ -26,7 +26,7 @@ export function StudioConsole({ logs, messages, tab, selected, checking, hidden,
     <Panel name="Console" side="bottom" hidden={hidden} onHidden={onHidden} className="cons" count={words}
       head={<>
         <Tabs label="Console" value={tab} onChange={onTab} tabs={[
-          { value: "console", label: "Console", count: errors || undefined },
+          { value: "console", label: "Log", count: errors || undefined },
           { value: "messages", label: "Messages", count: messages.length || undefined },
         ]} />
         <span className="tools">

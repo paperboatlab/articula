@@ -1,7 +1,7 @@
-// Processes, libraries and the environment on Windows (see squero/win32.hpp).
+// Processes, libraries and the environment on Windows (see articula/win32.hpp).
 #ifdef _WIN32
 
-#include "squero/win32.hpp"
+#include "articula/win32.hpp"
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -12,7 +12,7 @@
 #include <map>
 #include <mutex>
 
-namespace squero::win32 {
+namespace articula::win32 {
 namespace {
 
 namespace fs = std::filesystem;
@@ -265,6 +265,6 @@ void* symbol(void* library, const char* name) {
   return reinterpret_cast<void*>(GetProcAddress(static_cast<HMODULE>(library), name));
 }
 
-}  // namespace squero::win32
+}  // namespace articula::win32
 
 #endif

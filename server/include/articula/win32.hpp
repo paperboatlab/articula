@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace squero::win32 {
+namespace articula::win32 {
 
 enum class Err { Same, Null, Inherit };  // stderr: with stdout, to NUL, or the server's own
 
@@ -36,6 +36,6 @@ void set_env(const std::string& name, const std::string& value);
 void* load_library(const std::filesystem::path& path);  // with its folder searched for its own DLLs
 void* symbol(void* library, const char* name);
 
-}  // namespace squero::win32
+}  // namespace articula::win32
 
 #endif

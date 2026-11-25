@@ -1,4 +1,4 @@
-#include "squero/import.hpp"
+#include "articula/import.hpp"
 
 #include <algorithm>
 #include <array>
@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace squero {
+namespace articula {
 namespace {
 
 std::string trim(std::string_view s) {
@@ -875,8 +875,8 @@ nlohmann::json to_json(const ImportNotice& notice) {
 
 nlohmann::json ImportedModel::to_json() const {
   nlohmann::json conns = nlohmann::json::object();
-  for (const auto& [name, def] : connectors) conns[name] = squero::to_json(def);
-  return {{"icon", icon}, {"connectors", std::move(conns)}, {"notice", squero::to_json(notice)}};
+  for (const auto& [name, def] : connectors) conns[name] = articula::to_json(def);
+  return {{"icon", icon}, {"connectors", std::move(conns)}, {"notice", articula::to_json(notice)}};
 }
 
-}  // namespace squero
+}  // namespace articula

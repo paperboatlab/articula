@@ -1,6 +1,6 @@
-// The transport for squero/0: the only file in engine/modelica that knows sockets.
+// The transport for articula/0: the only file in engine/modelica that knows sockets.
 
-#include "squero/squero.hpp"
+#include "articula/server.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -33,7 +33,7 @@
 #include <array>
 #include <cstdio>
 
-#include "squero/win32.hpp"
+#include "articula/win32.hpp"
 #else
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -46,10 +46,10 @@
 #include <ixwebsocket/IXNetSystem.h>
 #include <nlohmann/json.hpp>
 
-#include "squero/generate.hpp"
-#include "squero/import.hpp"
+#include "articula/generate.hpp"
+#include "articula/import.hpp"
 
-namespace squero {
+namespace articula {
 namespace {
 
 namespace fs = std::filesystem;
@@ -83,7 +83,7 @@ ix::HttpResponsePtr respond(int code, const std::string& type, std::string body)
 
 // The built app's files, only from inside `app`; `/` is index.html.
 ix::HttpResponsePtr http(const fs::path& app, const ix::HttpRequestPtr& request) {
-  if (app.empty()) return respond(404, "text/plain", "squero/0: connect over WebSocket\n");
+  if (app.empty()) return respond(404, "text/plain", "articula/0: connect over WebSocket\n");
   std::string path = request->uri.substr(0, request->uri.find('?'));
   if (path == "/") path = "/index.html";
   std::error_code ec;
@@ -115,8 +115,9 @@ std::string trim(std::string s) {
 
 std::string text_of(const std::string& omc_answer) { return parse_value(omc_answer).atom; }
 
-// The package manager panel (shared with Squero MX and Paperboat): OpenModelica's own
-// package manager through omc, so it works wherever omc runs (here or in its container).
+// The libraries panel: OpenModelica's own package manager. Reading goes through the session; what
+// downloads (index, install, upgrade) runs in a short omc with the network for that step only, into the
+// workspace's package volume (omc's HOME), as `paperboat package add omc <lib>` does.
 // status: omc's version and the installed libraries with their versions; index: the
 // OpenModelica package index (updatePackageIndex, then its index.json); install: one
 // library at one version; upgrade: every installed library to its newest version.
@@ -140,9 +141,13 @@ json op_packages(Omc& omc, const json& in) {
     }
     return {{"version", text_of(omc.call("getVersion()"))}, {"path", library_dir()}, {"libraries", libraries}};
   }
+  // what needs the network runs in an omc of its own, the network allowed for that step
+  const auto online = [&](const std::string& mos, const std::string& what) {
+    const auto [code, log] = omc.script(mos + "\nprint(getErrorString());", true, std::chrono::minutes(10));
+    if (code != 0) throw std::runtime_error("cannot " + what + (log.empty() ? "" : ": " + log.substr(log.size() > 800 ? log.size() - 800 : 0)));
+  };
   if (action == "index") {
-    if (in.value("refresh", true) && omc.call("updatePackageIndex()", std::chrono::minutes(2)) != "true")
-      throw std::runtime_error("cannot update the package index: " + omc.errors());
+    if (in.value("refresh", true)) online("if not updatePackageIndex() then exit(1); end if;", "update the package index");
     const std::string text = text_of(omc.call("readFile(" + quoted(library_dir() + "/index.json") + ")"));
     const json index = json::parse(text, nullptr, false);
     if (index.is_discarded() || !index.contains("libs")) throw std::runtime_error("the package index could not be read");
@@ -182,13 +187,12 @@ json op_packages(Omc& omc, const json& in) {
     if (name.empty() || name.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_") != std::string::npos)
       throw std::runtime_error("install: a library name, like Buildings");
     const std::string version = in.value("version", "");
-    if (omc.call("installPackage(" + name + ", " + quoted(version) + ", exactMatch=" + (version.empty() ? "false" : "true") + ")", std::chrono::minutes(10)) != "true")
-      throw std::runtime_error("cannot install " + name + ": " + omc.errors());
+    online("if not installPackage(" + name + ", " + quoted(version) + ", exactMatch=" + (version.empty() ? "false" : "true") + ") then exit(1); end if;",
+           "install " + name);
     return op_packages(omc, {{"action", "status"}});
   }
   if (action == "upgrade") {
-    if (omc.call("upgradeInstalledPackages(installNewestVersions=true)", std::chrono::minutes(10)) != "true")
-      throw std::runtime_error("cannot upgrade the libraries: " + omc.errors());
+    online("if not upgradeInstalledPackages(installNewestVersions=true) then exit(1); end if;", "upgrade the libraries");
     return op_packages(omc, {{"action", "status"}});
   }
   throw std::runtime_error("packages: unknown action \"" + action + "\"");
@@ -1364,7 +1368,9 @@ struct RunProc {
   bool simulator;  // the model's executable (in the work folder), not the compiler
 };
 
-std::vector<RunProc> run_processes(const std::string& workdir) {
+// `workdir` as the host and as omc see it (a container's processes show its own paths in /proc).
+std::vector<RunProc> run_processes(const Omc& omc) {
+  const std::string workdir = omc.workdir(), inside = omc.omc_path(workdir);
   std::vector<RunProc> out;
 #ifdef __linux__
   static const std::set<std::string> keep = {"omc", "catatonit", "tini", "docker-init", "conmon", "podman", "sh", "bash"};
@@ -1373,30 +1379,33 @@ std::vector<RunProc> run_processes(const std::string& workdir) {
     const std::string name = e.path().filename().string();
     if (name.empty() || !std::all_of(name.begin(), name.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)); })) continue;
     std::error_code ignore;
-    if (fs::read_symlink(e.path() / "cwd", ignore).string() != workdir) continue;
+    const std::string cwd = fs::read_symlink(e.path() / "cwd", ignore).string();
+    if (cwd != workdir && cwd != inside) continue;
     std::ifstream comm_file(e.path() / "comm");
     std::string comm;
     std::getline(comm_file, comm);
     if (keep.contains(comm)) continue;
     const std::string exe = fs::read_symlink(e.path() / "exe", ignore).string();
-    out.push_back({std::stoi(name), exe.starts_with(workdir + "/")});
+    out.push_back({std::stoi(name), exe.starts_with(cwd + "/")});
   }
 #else
-  (void)workdir;  // ponytail: /proc only; Cancel and the phase need Linux for now
+  (void)omc;  // ponytail: /proc only; the phase needs Linux for now
 #endif
   return out;
 }
 
-/** Cancel: stop whatever the run has going in omc's work folder, for a second (make starts the next step). */
-json op_cancel(const Omc& omc) {
+/** Cancel: stop whatever the run has going in omc's work folder, for a second (make starts the next
+    step); when none shows (not Linux, or omc itself is busy), end omc's session instead. */
+json op_cancel(Omc& omc) {
   g_cancelled = true;
   int stopped = 0;
 #ifdef __linux__
   for (int i = 0; i < 10; ++i) {
-    for (const auto& p : run_processes(omc.workdir())) stopped += ::kill(p.pid, SIGTERM) == 0;
+    for (const auto& p : run_processes(omc)) stopped += ::kill(p.pid, SIGTERM) == 0;
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 #endif
+  if (stopped == 0) omc.cancel();
   return json{{"stopped", stopped}};
 }
 
@@ -1409,7 +1418,7 @@ json op_simulate(Omc& omc, const json& in, const Session& session) {
     if (!session.push) return;
     std::string said;
     while (!stop.stop_requested()) {
-      const auto procs = run_processes(omc.workdir());
+      const auto procs = run_processes(omc);
       const std::string stage = std::any_of(procs.begin(), procs.end(), [](const RunProc& p) { return p.simulator; }) ? "simulating"
                                 : procs.empty() ? said : "compiling";
       if (!stage.empty() && stage != said) {
@@ -1446,7 +1455,7 @@ json simulate_run(Omc& omc, const json& in) {
   // model as `m` and feeds each input its stimulus (0 unless given), then name things as the model does.
   const auto inputs = top_inputs(omc, model);
   const json given = in.value("inputs", json::object());
-  const std::string harness = "SqueroSimHarness";
+  const std::string harness = "ArticulaSimHarness";
   const std::string prefix = inputs.empty() ? "" : "m.";
   if (!inputs.empty()) {
     std::string text = "model " + harness + "\n  " + model + " m;\nequation\n";
@@ -1613,7 +1622,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       const std::string expr = in["expr"];
       if (!allowed(expr)) {
         out["ok"] = false;
-        out["error"] = "not allowed: " + expr.substr(0, expr.find('(')) + " (Studio may call only the squero/0 allow-list)";
+        out["error"] = "not allowed: " + expr.substr(0, expr.find('(')) + " (Studio may call only the articula/0 allow-list)";
         return out.dump();
       }
       out["result"] = omc.call(expr);
@@ -1668,7 +1677,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in, session);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; squero/0 has omc, open, workspace, config, config_write, about, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
+      out["error"] = "unknown op; articula/0 has omc, open, workspace, config, config_write, about, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
       return out.dump();
     }
     out["ok"] = true;
@@ -1689,10 +1698,10 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
 }
 
 fs::path default_workspace() {
-  if (const char* given = std::getenv("SQUERO_OM_WORKSPACE"); given && *given) return given;
+  if (const char* given = std::getenv("ARTICULA_WORKSPACE"); given && *given) return given;
   const char* home = std::getenv("HOME");
   if (!home || !*home) home = std::getenv("USERPROFILE");
-  return fs::path(home && *home ? home : ".") / "Documents" / "paperboat" / "squero" / "om";
+  return fs::path(home && *home ? home : ".") / "Documents" / "paperboat" / "articula";
 }
 
 fs::path default_file(const fs::path& dir) {
@@ -1705,10 +1714,17 @@ fs::path default_file(const fs::path& dir) {
   return models.empty() ? dir / "Untitled.mo" : models.front();
 }
 
-int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::path& given) {
+fs::path workspace_of(const fs::path& file) {
+  fs::path root = fs::is_directory(file) ? file : file.parent_path();
+  while (fs::exists(root / "package.mo") && root.has_parent_path() && root.parent_path() != root) root = root.parent_path();
+  return root;
+}
+
+int serve_articula(int port, const fs::path& app, Omc::Options options, const fs::path& given) {
   ix::initNetSystem();
-  // No model named: open the Studio's own folder, as Squero MX does, never the launch directory.
-  const fs::path file = given.empty() ? default_file() : given;
+  // No model named: open the Studio's own folder, never the launch directory. A folder: its first model.
+  const fs::path file = given.empty() ? default_file() : fs::is_directory(given) ? default_file(given) : fs::absolute(given);
+  if (options.project.empty()) options.project = workspace_of(file);
   // SIGTERM (a closed terminal, `paperboat stop`, systemd) and SIGINT (Ctrl-C) both mean
   // "stop": wake the loop below so omc is stopped on purpose, not just orphaned.
   stop_requested.store(false, std::memory_order_relaxed);
@@ -1727,11 +1743,11 @@ int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::
   sigaction(SIGINT, &sa, nullptr);
 #endif
   Omc omc(std::move(options));
-  // port 0: the first free one of SQR01..SQR99 (59201..59299)
-  for (int p = 59201; port == 0 && p <= 59299; ++p)
+  // port 0: the first free one of 59240..59259 (apps.toml gives Articula 59240)
+  for (int p = 59240; port == 0 && p <= 59259; ++p)
     if (!listening(p)) port = p;
   if (port == 0) {
-    std::cerr << "no free port in 59201..59299\n";
+    std::cerr << "no free port in 59240..59259\n";
     return 1;
   }
   ix::HttpServer server(port, "127.0.0.1");
@@ -1779,7 +1795,7 @@ int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::
     return 1;
   }
   server.start();
-  std::cout << "squero studio OM server (squero/0) on ws://localhost:" << port
+  std::cout << "Articula server (articula/0) on ws://localhost:" << port
             << (app.empty() ? std::string() : "  app: http://localhost:" + std::to_string(port) + "/") << '\n'
             << "opens " << fs::absolute(file).string() << std::endl;
   // Start omc now so the first status a client sees is real.
@@ -1795,4 +1811,4 @@ int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::
   return 0;
 }
 
-}  // namespace squero
+}  // namespace articula

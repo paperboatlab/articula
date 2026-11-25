@@ -1,111 +1,109 @@
-#include "squero/omc.hpp"
+#include "articula/omc.hpp"
 
-#ifdef _WIN32
-#include "squero/win32.hpp"
-#else
-#include <dlfcn.h>
-#ifdef __linux__
-#include <sys/prctl.h>
-#endif
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
-#include <sys/wait.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
-#endif
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <mutex>
 #include <optional>
-#include <type_traits>
 #include <thread>
 #include <utility>
 
-namespace squero {
+#include <nlohmann/json.hpp>
+
+namespace articula {
 namespace {
 
 namespace fs = std::filesystem;
+using json = nlohmann::json;
 using namespace std::chrono_literals;
-#ifdef _WIN32
-using pid_t = int;
-#endif
+using Clock = std::chrono::steady_clock;
 
-// The few libzmq calls the bridge needs, resolved from libzmq.so.5 at run time. The ABI is
-// stable across libzmq 4.x: zmq_msg_t is 64 opaque bytes, the constants are fixed.
-struct ZmqMsg {
-  alignas(8) unsigned char bytes[64];
-};
-constexpr int kReq = 3, kLinger = 17, kRcvTimeo = 27, kSndTimeo = 28;
+std::string env(const char* name) {
+  const char* v = std::getenv(name);
+  return v ? v : "";
+}
 
-struct Zmq {
-  void* (*ctx_new)() = nullptr;
-  int (*ctx_term)(void*) = nullptr;
-  void* (*socket)(void*, int) = nullptr;
-  int (*close)(void*) = nullptr;
-  int (*connect)(void*, const char*) = nullptr;
-  int (*setsockopt)(void*, int, const void*, std::size_t) = nullptr;
-  int (*send)(void*, const void*, std::size_t, int) = nullptr;
-  int (*msg_init)(ZmqMsg*) = nullptr;
-  int (*msg_recv)(ZmqMsg*, void*, int) = nullptr;
-  void* (*msg_data)(ZmqMsg*) = nullptr;
-  std::size_t (*msg_size)(const ZmqMsg*) = nullptr;
-  int (*msg_close)(ZmqMsg*) = nullptr;
+// paperboatd's socket (paperboat/docs/control.md).
+fs::path control_socket() {
+  fs::path dir = !env("PAPERBOAT_RUNTIME_DIR").empty() ? fs::path(env("PAPERBOAT_RUNTIME_DIR"))
+                 : !env("XDG_RUNTIME_DIR").empty()     ? fs::path(env("XDG_RUNTIME_DIR")) / "paperboat"
+                                                       : fs::temp_directory_path() / ("paperboat-" + std::to_string(getuid()));
+  return dir / "control.sock";
+}
 
-  static const Zmq& get() {
-    static const Zmq zmq = [] {
-      Zmq z;
-      void* lib = nullptr;
-#ifdef _WIN32
-      // OpenModelica ships it next to omc.exe (libzmq.dll, or a versioned libzmq-*.dll).
-      std::vector<fs::path> dirs;
-      if (const std::string omc = resolve_omc().exe; fs::path(omc).has_parent_path()) dirs.push_back(fs::path(omc).parent_path());
-      if (const char* home = std::getenv("OPENMODELICAHOME"); home && *home) dirs.push_back(fs::path(home) / "bin");
-      for (const fs::path& dir : dirs) {
-        std::error_code ec;
-        for (const auto& e : fs::directory_iterator(dir, ec)) {
-          const std::string n = e.path().filename().string();
-          if (n.starts_with("libzmq") && e.path().extension() == ".dll" && (lib = win32::load_library(e.path()))) break;
-        }
-        if (lib) break;
-      }
-      if (!lib) return z;
-      auto sym = [&](auto& fn, const char* n) { fn = reinterpret_cast<std::remove_reference_t<decltype(fn)>>(win32::symbol(lib, n)); };
-#else
-      for (const char* name : {"libzmq.so.5", "libzmq.so", "libzmq.5.dylib", "libzmq.dylib"})
-        if ((lib = dlopen(name, RTLD_NOW | RTLD_LOCAL))) break;
-      if (!lib) return z;
-      auto sym = [&](auto& fn, const char* n) { fn = reinterpret_cast<std::remove_reference_t<decltype(fn)>>(dlsym(lib, n)); };
-#endif
-      sym(z.ctx_new, "zmq_ctx_new");
-      sym(z.ctx_term, "zmq_ctx_term");
-      sym(z.socket, "zmq_socket");
-      sym(z.close, "zmq_close");
-      sym(z.connect, "zmq_connect");
-      sym(z.setsockopt, "zmq_setsockopt");
-      sym(z.send, "zmq_send");
-      sym(z.msg_init, "zmq_msg_init");
-      sym(z.msg_recv, "zmq_msg_recv");
-      sym(z.msg_data, "zmq_msg_data");
-      sym(z.msg_size, "zmq_msg_size");
-      sym(z.msg_close, "zmq_msg_close");
-      return z;
-    }();
-#ifdef _WIN32
-    if (!zmq.msg_close) throw OmcError("libzmq*.dll not found next to omc.exe or in %OPENMODELICAHOME%\\bin (it comes with OpenModelica)");
-#else
-    if (!zmq.msg_close) throw OmcError("libzmq.so.5 not found (it comes with OpenModelica)");
-#endif
-    return zmq;
+// paperboatd: $PAPERBOATD, else beside `paperboat` on PATH.
+std::string daemon_path() {
+  if (!env("PAPERBOATD").empty()) return env("PAPERBOATD");
+  const std::string path = env("PATH");
+  for (std::size_t at = 0; at <= path.size();) {
+    const std::size_t end = std::min(path.find(':', at), path.size());
+    const fs::path p = fs::path(path.substr(at, end - at)) / "paperboatd";
+    if (access(p.c_str(), X_OK) == 0) return p.string();
+    at = end + 1;
   }
-};
+  return "";
+}
 
-std::atomic<int> sessions{0};
+int connect_unix(const fs::path& path) {
+  sockaddr_un addr{};
+  addr.sun_family = AF_UNIX;
+  std::string p = path.string();
+  int dir = -1;
+#ifdef __linux__
+  // A lease's socket under a long home passes sun_path's 108 bytes: reach it through its folder's fd.
+  if (p.size() >= sizeof addr.sun_path && (dir = ::open(path.parent_path().c_str(), O_PATH | O_CLOEXEC)) >= 0)
+    p = "/proc/self/fd/" + std::to_string(dir) + "/" + path.filename().string();
+#endif
+  if (p.size() >= sizeof addr.sun_path) throw OmcError("socket path too long: " + path.string());
+  std::memcpy(addr.sun_path, p.c_str(), p.size() + 1);
+  const int fd = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  const bool ok = fd >= 0 && ::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) == 0;
+  if (dir >= 0) ::close(dir);
+  if (ok) return fd;
+  if (fd >= 0) ::close(fd);
+  return -1;
+}
+
+bool write_all(int fd, std::string_view data) {
+  while (!data.empty()) {
+    const ssize_t n = ::send(fd, data.data(), data.size(), MSG_NOSIGNAL);
+    if (n <= 0) return false;
+    data.remove_prefix(static_cast<std::size_t>(n));
+  }
+  return true;
+}
+
+// Reads exactly n bytes by `deadline`; false on timeout or a closed socket.
+bool read_all(int fd, char* out, std::size_t n, Clock::time_point deadline) {
+  while (n > 0) {
+    const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count();
+    if (left <= 0) return false;
+    pollfd p{fd, POLLIN, 0};
+    if (::poll(&p, 1, static_cast<int>(std::min<long long>(left, 1'000'000))) <= 0) continue;
+    const ssize_t r = ::recv(fd, out, n, 0);
+    if (r <= 0) return false;
+    out += r;
+    n -= static_cast<std::size_t>(r);
+  }
+  return true;
+}
+
+// Every occurrence of `from` in `s` becomes `to`.
+std::string replace_all(std::string s, const std::string& from, const std::string& to) {
+  if (from.empty() || from == to) return s;
+  for (std::size_t at = s.find(from); at != std::string::npos; at = s.find(from, at + to.size())) s.replace(at, from.size(), to);
+  return s;
+}
 
 std::string trim(std::string s) {
   while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.pop_back();
@@ -181,20 +179,20 @@ std::string_view name(OmcState state) {
 struct Omc::Impl {
   Options options;
   std::mutex mutex;  // the queue: one request in flight
-  pid_t pid = -1;
-  void* ctx = nullptr;
-  void* sock = nullptr;
-  std::string session;
-  std::string container_name;  // a podman/docker run's name, for `rm -f` on stop
-  pid_t cleanup_pid = -1;      // the child that removes the container when we go, however we go
-  int cleanup_fd = -1;         // its pipe: closing it (even by SIGKILL) wakes it
+  int control = -1;  // the paperboatd connection: the lease lives as long as it stays open
+  int runtime = -1;  // <ipc>/runtime.sock, paperboat-runtime/0
+  int next_id = 1;
+  json lease;
+  // host folder → the path omc sees (the lease's mounts); empty natively, where they are the same
+  std::vector<std::pair<std::string, std::string>> paths;
   fs::path workdir;
   std::string version;
-  OmcRuntime runtime;
+  std::string backend;
   OmcState state = OmcState::Ready;
   int restarts = 0;  // in a row
   bool started_once = false;
   bool shutting_down = false;  // a stop was asked for; never start again
+  std::atomic<bool> cancelled{false};  // Cancel ended the call in flight: fail it, don't retry it
   std::vector<std::string> replay;  // loadModel / loadFile calls that succeeded
   StatusFn status_fn;
   LogFn log_fn;
@@ -211,238 +209,139 @@ struct Omc::Impl {
     if (status_fn) status_fn(s, version);
   }
 
-  fs::path port_file() const {
-    // omc writes <tmp>/openmodelica.<user>.port.<session>; the user part varies, so look.
-    const std::string suffix = ".port." + session;
-    for (const fs::path& dir : {fs::temp_directory_path(), fs::path("/tmp")}) {
-      std::error_code ec;
-      for (const auto& e : fs::directory_iterator(dir, ec)) {
-        const std::string n = e.path().filename().string();
-        if (n.starts_with("openmodelica.") && n.ends_with(suffix)) return e.path();
+  // One paperboat-control/0 request on the lease's connection (or another).
+  json control_call(const std::string& op, const json& args) { return control_call(control, op, args); }
+  json control_call(int control, const std::string& op, const json& args) {
+    const int id = next_id++;
+    if (!write_all(control, json{{"id", id}, {"op", op}, {"args", args}}.dump() + "\n")) throw OmcError("paperboatd went away");
+    std::string line;
+    for (char c;;) {
+      if (!read_all(control, &c, 1, Clock::now() + 30min)) throw OmcError("paperboatd went away");  // acquire may pull the image
+      if (c != '\n') {
+        line += c;
+        continue;
       }
+      const json m = json::parse(line, nullptr, false);
+      line.clear();
+      if (!m.is_object() || m.value("id", -1) != id) continue;  // an event
+      if (!m.value("ok", false)) throw OmcError("paperboatd: " + m.value("error", std::string("refused ") + op));
+      return m["result"];
     }
-    return {};
   }
 
-  // A podman/docker run's client can die with us and leave its container running (`--init`
-  // omc as PID 1). This child waits for our end of a pipe to close (a normal stop, SIGKILL,
-  // or a crash all close it) and then removes the container by name.
-  void start_cleaner() {
-    if (runtime.mode == "native" || container_name.empty()) return;
-#ifdef _WIN32
-    // Windows runs omc natively only (resolve_omc); no container to clean up after.
-#else
-    int fds[2];
-    if (pipe2(fds, O_CLOEXEC) != 0) return;
-    cleanup_pid = fork();
-    if (cleanup_pid == 0) {
-#ifdef __linux__
-      prctl(PR_SET_PDEATHSIG, 0);  // we must outlive the server to clean up after it
-#endif
-      // A terminal sends Ctrl-C (SIGINT) to the whole process group, and `kill` often does
-      // the same: ignore it here, or the cleaner would die before it removed the container.
-      struct sigaction ignore {};
-      ignore.sa_handler = SIG_IGN;
-      sigemptyset(&ignore.sa_mask);
-      sigaction(SIGINT, &ignore, nullptr);
-      sigaction(SIGTERM, &ignore, nullptr);
-      sigaction(SIGHUP, &ignore, nullptr);
-      close(fds[1]);
-      char buf[1];
-      while (read(fds[0], buf, 1) > 0) {
-      }
-      close(fds[0]);
-      execlp(runtime.exe.c_str(), runtime.exe.c_str(), "rm", "-f", "-t", "1", container_name.c_str(),
-             static_cast<char*>(nullptr));
+  // paperboatd, started as the CLI starts it when it isn't running.
+  int open_control() {
+    const fs::path sock = control_socket();
+    if (const int fd = connect_unix(sock); fd >= 0) return fd;
+    const std::string d = daemon_path();
+    if (d.empty()) throw OmcError("paperboatd not found: install Paperboat (the paperboat-cli package) or set PAPERBOATD");
+    fs::create_directories(sock.parent_path());
+    if (const pid_t pid = fork(); pid == 0) {
+      setsid();
+      const std::string log = (sock.parent_path() / "paperboatd.log").string();
+      const int out = ::open(log.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0600);
+      const int in = ::open("/dev/null", O_RDONLY);
+      if (in >= 0) dup2(in, 0);
+      if (out >= 0) dup2(out, 1), dup2(out, 2);
+      execl(d.c_str(), d.c_str(), "--socket", sock.c_str(), static_cast<char*>(nullptr));
       _exit(127);
     }
-    close(fds[0]);
-    if (cleanup_pid < 0) {
-      close(fds[1]);
-      return;
+    for (int i = 0; i < 200; ++i) {  // up to 20 s: a first start probes podman and docker
+      std::this_thread::sleep_for(100ms);
+      if (const int fd = connect_unix(sock); fd >= 0) return fd;
     }
-    cleanup_fd = fds[1];
-#endif
-  }
-
-  void remove_container() {
-    if (container_name.empty()) return;
-#ifdef _WIN32
-    container_name.clear();
-#else
-    if (cleanup_fd >= 0) {
-      close(cleanup_fd);  // wakes the cleaner: it runs `rm -f`
-      cleanup_fd = -1;
-    }
-    if (cleanup_pid > 0) {
-      // `podman rm -f -t 1` stops the container in a second or two; do not hang on a broken engine.
-      for (int i = 0; i < 300 && waitpid(cleanup_pid, nullptr, WNOHANG) == 0; ++i)
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      if (waitpid(cleanup_pid, nullptr, WNOHANG) == 0) {
-        kill(cleanup_pid, SIGKILL);
-        waitpid(cleanup_pid, nullptr, 0);
-      }
-      cleanup_pid = -1;
-      container_name.clear();
-      return;
-    }
-    // No cleaner (it could not be forked): remove the container here.
-    const std::string engine = runtime.exe;
-    const std::string name = std::exchange(container_name, {});
-    const pid_t child = fork();
-    if (child == 0) {
-      execlp(engine.c_str(), engine.c_str(), "rm", "-f", "-t", "1", name.c_str(), static_cast<char*>(nullptr));
-      _exit(127);
-    }
-    if (child > 0) waitpid(child, nullptr, 0);
-#endif
-  }
-
-  void stop() {
-    const Zmq* z = nullptr;
-    try {
-      z = &Zmq::get();
-    } catch (const OmcError&) {
-    }
-    if (z && sock) z->close(sock);
-    if (z && ctx) z->ctx_term(ctx);
-    sock = ctx = nullptr;
-    if (pid > 0) {
-#ifdef _WIN32
-      // no SIGTERM to ask with: the ZeroMQ socket is closed, so end omc and what it started
-      win32::kill_tree(pid);
-      win32::wait(pid);
-#else
-      kill(pid, SIGTERM);
-      for (int i = 0; i < 20 && waitpid(pid, nullptr, WNOHANG) == 0; ++i) std::this_thread::sleep_for(25ms);
-      if (waitpid(pid, nullptr, WNOHANG) == 0) {
-        kill(pid, SIGKILL);
-        waitpid(pid, nullptr, 0);
-      }
-#endif
-      pid = -1;
-    }
-    // A container's podman client can go while its container keeps running (`--init` omc as
-    // PID 1): remove it by name, so a stopped Studio leaves no omc behind.
-    remove_container();
-    if (const fs::path f = port_file(); !f.empty()) fs::remove(f);
+    throw OmcError("paperboatd did not start; see " + (sock.parent_path() / "paperboatd.log").string());
   }
 
   void start() {
-    const Zmq& z = Zmq::get();
-#ifdef _WIN32
-    session = "paperboat-" + std::to_string(win32::current_pid()) + "-" + std::to_string(sessions++);
-#else
-    session = "paperboat-" + std::to_string(getpid()) + "-" + std::to_string(sessions++);
-#endif
-    workdir = fs::temp_directory_path() / ("paperboat-omc-" + session);
-    fs::create_directories(workdir);
-    const std::string zarg = "-z=" + session;
-    if (runtime.mode.empty()) runtime = options.omc.empty() ? resolve_omc() : OmcRuntime{"native", options.omc, ""};
-    if (runtime.mode != "native") container_name = "paperboat-omc-" + session;
-    start_cleaner();
-    std::vector<std::string> command = omc_command(runtime, workdir.string(), {"--interactive=zmq", zarg}, container_name);
-#ifdef _WIN32
-    // In a job that ends with this process, however it ends (PR_SET_PDEATHSIG on Linux).
-    pid = win32::spawn(command, workdir, {}, win32::Err::Inherit, true);
-    if (pid < 0) throw OmcError("cannot start omc (`" + runtime.exe + "`" + (runtime.why.empty() ? "" : "; " + runtime.why) + ")");
-#else
-    pid = fork();
-    if (pid < 0) throw OmcError("cannot start omc: fork failed");
-    if (pid == 0) {
-#ifdef __linux__
-      // A native omc can ignore SIGTERM; kill it outright when the server goes away, even if
-      // the server was stopped with SIGTERM and never ran its destructor. A container gets
-      // SIGTERM so podman can stop and --rm it.
-      prctl(PR_SET_PDEATHSIG, runtime.mode == "native" ? SIGKILL : SIGTERM);
-      if (getppid() == 1) _exit(127);  // the parent died before prctl took effect
-#endif
-      if (chdir(workdir.c_str()) != 0) _exit(127);
-      const int devnull = open("/dev/null", O_RDWR);
-      if (devnull >= 0) {
-        dup2(devnull, STDIN_FILENO);
-        dup2(devnull, STDOUT_FILENO);
-        // the engine's own chatter (a stop signal racing the container's exit) isn't omc's
-        if (runtime.mode != "native") dup2(devnull, STDERR_FILENO);
-      }
-      close_range(3, ~0U, 0);  // not the server's sockets
-      std::vector<char*> argv;
-      for (auto& a : command) argv.push_back(a.data());
-      argv.push_back(nullptr);
-      execvp(argv[0], argv.data());
-      _exit(127);
+    if (shutting_down) throw OmcError("omc is shutting down");
+    control = open_control();
+    json args = {{"runtime", options.runtime}, {"mode", "session"}, {"owner", "articula:" + options.project.string()}};
+    if (!options.project.empty()) args["project"] = fs::absolute(options.project).string(), args["policy"] = {{"writable_project", true}};
+    lease = control_call("acquire", args);
+    backend = lease.value("backend", "");
+    workdir = lease.value("work", "");
+    paths.clear();
+    if (backend != "native") {  // the manifest's default mounts (paperboat/docs/control.md)
+      if (!options.project.empty()) paths.emplace_back(fs::absolute(options.project).string(), "/work/project");
+      paths.emplace_back(lease.value("work", ""), "/work/out");
+      paths.emplace_back(lease.value("deps", ""), "/work/deps");
     }
-#endif
-    fs::path file;
-    // up to 20 s; a container's first start pulls the image, so minutes
-    const int tries = runtime.mode == "native" ? 400 : 20 * 60 * 10;
-    for (int i = 0; i < tries && (file = port_file()).empty(); ++i) {
-#ifdef _WIN32
-      if (!win32::running(pid)) {
-        win32::wait(pid);
-#else
-      if (waitpid(pid, nullptr, WNOHANG) == pid) {
-#endif
-        pid = -1;
-        throw OmcError("omc exited at start (" + runtime.mode + ": `" + runtime.exe + "`" + (runtime.why.empty() ? "" : "; " + runtime.why) + ")");
-      }
-      std::this_thread::sleep_for(50ms);
+    const fs::path sock = fs::path(lease.value("ipc", "")) / "runtime.sock";
+    for (const auto until = Clock::now() + 5min; (runtime = connect_unix(sock)) < 0;) {  // the image may still be pulling
+      if (Clock::now() > until) throw OmcError("omc did not start (" + sock.string() + ")");
+      std::this_thread::sleep_for(100ms);
     }
-    std::string endpoint;
-    for (int i = 0; i < 40 && endpoint.empty(); ++i) {  // the file can appear before it's written
-      std::ifstream in(file);
-      std::getline(in, endpoint);
-      endpoint = trim(endpoint);
-      if (endpoint.empty()) std::this_thread::sleep_for(25ms);
-    }
-    if (endpoint.empty()) {
-      stop();
-      throw OmcError("omc did not report its port");
-    }
-    ctx = z.ctx_new();
-    sock = z.socket(ctx, kReq);
-    const int linger = 0;
-    z.setsockopt(sock, kLinger, &linger, sizeof linger);
-    if (z.connect(sock, endpoint.c_str()) != 0) {
-      stop();
-      throw OmcError("cannot connect to omc at " + endpoint);
-    }
+    json hello;
+    if (!read_frame(hello, Clock::now() + 2min) || hello.value("type", "") != "hello") throw OmcError("omc said no hello");
+    version = hello["runtime"].value("version", "");
     started_once = true;
+    exchange("cd(" + quote(workdir.string()) + ")", options.timeout);  // builds and results land in the lease's work folder
   }
 
-  // One round trip; nullopt on timeout or a dead omc.
+  bool read_frame(json& out, Clock::time_point deadline) {
+    char len[4];
+    if (!read_all(runtime, len, 4, deadline)) return false;
+    const std::uint32_t n = static_cast<unsigned char>(len[0]) | static_cast<unsigned char>(len[1]) << 8 |
+                            static_cast<unsigned char>(len[2]) << 16 | static_cast<std::uint32_t>(static_cast<unsigned char>(len[3])) << 24;
+    std::string body(n, '\0');
+    if (!read_all(runtime, body.data(), n, deadline)) return false;
+    out = json::parse(body, nullptr, false);
+    return true;
+  }
+
+  // The lease goes with its connection: closing it releases omc, wherever it runs.
+  void stop() {
+    if (runtime >= 0) ::close(runtime);
+    if (control >= 0) ::close(control);
+    runtime = control = -1;
+  }
+
+  std::string to_omc(std::string s) const {
+    for (const auto& [host, inside] : paths) s = replace_all(std::move(s), host, inside);
+    return s;
+  }
+  std::string from_omc(std::string s) const {
+    for (const auto& [host, inside] : paths) s = replace_all(std::move(s), inside, host);
+    return s;
+  }
+
+  // One round trip; nullopt on timeout or a dead omc. Paths go in as omc sees them and come back as
+  // the host has them.
   std::optional<std::string> exchange(std::string_view expr, std::chrono::milliseconds timeout) {
-    const Zmq& z = Zmq::get();
-    const int ms = static_cast<int>(timeout.count());
-    z.setsockopt(sock, kSndTimeo, &ms, sizeof ms);
-    z.setsockopt(sock, kRcvTimeo, &ms, sizeof ms);
-    if (z.send(sock, expr.data(), expr.size(), 0) < 0) return std::nullopt;
-    ZmqMsg msg;
-    z.msg_init(&msg);
-    if (z.msg_recv(&msg, sock, 0) < 0) {
-      z.msg_close(&msg);
-      return std::nullopt;
+    const int id = next_id++;
+    const std::string body = json{{"id", id}, {"op", "eval"}, {"args", {{"code", to_omc(std::string(expr))}}}}.dump();
+    const std::uint32_t n = static_cast<std::uint32_t>(body.size());
+    const char len[4] = {static_cast<char>(n), static_cast<char>(n >> 8), static_cast<char>(n >> 16), static_cast<char>(n >> 24)};
+    if (!write_all(runtime, std::string_view(len, 4)) || !write_all(runtime, body)) return std::nullopt;
+    for (const auto deadline = Clock::now() + timeout;;) {
+      json m;
+      if (!read_frame(m, deadline)) return std::nullopt;
+      if (!m.is_object() || m.value("id", -1) != id || m.contains("type")) continue;  // a notification
+      if (!m.value("ok", false)) {
+        const json& e = m["error"];
+        throw OmcError(e.is_object() ? e.value("message", std::string("omc failed")) : std::string("omc failed"));
+      }
+      std::string out = m["result"]["data"].value("text/plain", "");
+      while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) out.pop_back();
+      return from_omc(std::move(out));
     }
-    std::string out(static_cast<const char*>(z.msg_data(&msg)), z.msg_size(&msg));
-    z.msg_close(&msg);
-    while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) out.pop_back();
-    return out;
   }
 
   std::string call(std::string_view expr, std::chrono::milliseconds timeout) {
     std::lock_guard lock(mutex);
     if (shutting_down) throw OmcError("omc is shutting down");
-    if (state == OmcState::Failed) throw OmcError("omc failed: restarted " + std::to_string(restarts) + " times");
+    if (state == OmcState::Failed && restarts > options.max_restarts) throw OmcError("omc failed: restarted " + std::to_string(restarts) + " times");
     set_state(OmcState::Checking);
     for (;;) {
       try {
-        if (!sock) {
+        if (runtime < 0) {
           const bool again = started_once;
           start();
-          if (auto v = exchange("getVersion()", timeout)) version = trim(*v), version = version.size() >= 2 ? version.substr(1, version.size() - 2) : version;
           if (again)  // a restart: load what the old omc had loaded
             for (const auto& r : replay) exchange(r, timeout);
         }
+        cancelled = false;
         if (auto out = exchange(expr, timeout)) {
           restarts = 0;
           if ((expr.starts_with("loadModel(") || expr.starts_with("loadFile(")) && *out == "true")
@@ -450,12 +349,18 @@ struct Omc::Impl {
           set_state(OmcState::Ready);
           return *out;
         }
-      } catch (const OmcError&) {
-        stop();
-        set_state(OmcState::Failed);
+      } catch (const OmcError& e) {
+        // omc's own refusal (an `eval` error) leaves the session up; anything else ends it
+        const bool session_ok = runtime >= 0 && std::string_view(e.what()).find("went away") == std::string_view::npos;
+        if (!session_ok) stop(), set_state(OmcState::Failed);
+        else set_state(OmcState::Ready);
         throw;
       }
-      stop();  // timed out or died: restart and retry, up to max_restarts in a row
+      stop();  // timed out or died: a new session, replayed, up to max_restarts in a row
+      if (cancelled.exchange(false)) {
+        set_state(OmcState::Ready);
+        throw OmcError("cancelled");
+      }
       if (++restarts > options.max_restarts) {
         set_state(OmcState::Failed);
         throw OmcError("omc did not answer `" + std::string(expr.substr(0, 60)) + "` within " +
@@ -484,17 +389,7 @@ struct Omc::Impl {
 Omc::Omc() : Omc(Options{}) {}
 Omc::Omc(Options options) : impl_(std::make_unique<Impl>()) { impl_->options = std::move(options); }
 
-Omc::~Omc() {
-  if (impl_->sock) {
-    try {
-      impl_->exchange("quit()", 1s);
-    } catch (...) {
-    }
-  }
-  impl_->stop();
-  std::error_code ec;
-  if (!impl_->workdir.empty()) fs::remove_all(impl_->workdir, ec);
-}
+Omc::~Omc() { impl_->stop(); }
 
 std::string Omc::call(std::string_view expr) { return impl_->call(expr, impl_->options.timeout); }
 std::string Omc::call(std::string_view expr, std::chrono::milliseconds timeout) { return impl_->call(expr, timeout); }
@@ -503,8 +398,13 @@ void Omc::shutdown() {
   std::lock_guard lock(impl_->mutex);
   impl_->shutting_down = true;
   impl_->stop();
-  std::error_code ec;
-  if (!impl_->workdir.empty()) fs::remove_all(impl_->workdir, ec);
+}
+
+void Omc::cancel() {
+  // Not under the queue's lock (the call it ends holds it). omc can't stop a call, so the session
+  // ends; the next call starts a new one and loads again what this one had.
+  impl_->cancelled = true;
+  if (const int fd = impl_->runtime; fd >= 0) ::shutdown(fd, SHUT_RDWR);
 }
 
 std::string Omc::errors() { return impl_->drain().first; }
@@ -539,100 +439,39 @@ OmcState Omc::state() const {
 std::string Omc::version() const { return impl_->version; }
 void Omc::on_status(StatusFn fn) { impl_->status_fn = std::move(fn); }
 std::string Omc::workdir() const { return impl_->workdir.string(); }
-std::string Omc::mode() const { return impl_->runtime.mode; }
+std::string Omc::mode() const { return impl_->backend; }
+std::string Omc::omc_path(const std::string& host) const { return impl_->to_omc(host); }
 
-namespace {
-// `name` on PATH (or a path that exists), else "".
-std::string which(const std::string& name) {
-#ifdef _WIN32
-  if (name.find_first_of("/\\") != std::string::npos) return fs::exists(name) ? name : "";
-  return win32::which(name);
-#else
-  if (name.find('/') != std::string::npos) return fs::exists(name) ? name : "";
-  const char* path = std::getenv("PATH");
-  std::string_view rest = path ? path : "";
-  while (!rest.empty()) {
-    const auto colon = rest.find(':');
-    const fs::path f = fs::path(std::string(rest.substr(0, colon))) / name;
-    if (access(f.c_str(), X_OK) == 0) return f.string();
-    rest = colon == std::string_view::npos ? "" : rest.substr(colon + 1);
+std::pair<int, std::string> Omc::script(const std::string& mos, bool network, std::chrono::milliseconds timeout) {
+  // its own connection: the session's keeps its lease, and the two never share replies
+  const int fd = impl_->open_control();
+  const auto close_fd = [fd] { ::close(fd); };
+  try {
+    std::string body = "cat > /tmp/articula.mos <<'ARTICULA_MOS'\n" + impl_->to_omc(mos) + "\nARTICULA_MOS\nexec omc /tmp/articula.mos";
+    json args = {{"runtime", impl_->options.runtime}, {"mode", "exec"}, {"owner", "articula:" + impl_->options.project.string() + ":libraries"},
+                 {"command", {"sh", "-c", body}}};
+    if (!impl_->options.project.empty()) args["project"] = fs::absolute(impl_->options.project).string();
+    if (network) args["policy"] = {{"network", true}};
+    const json lease = impl_->control_call(fd, "acquire", args);
+    const std::string id = lease.value("id", "");
+    int code = -1;
+    for (const auto until = Clock::now() + timeout;;) {  // ponytail: polls ps; events when the server subscribes
+      bool done = true;
+      for (const auto& l : impl_->control_call(fd, "ps", json::object()))
+        if (l.value("id", "") == id && l.value("state", "") != "exited" && l.value("state", "") != "failed") done = false;
+        else if (l.value("id", "") == id) code = l.value("exit_code", l.value("state", "") == "exited" ? 0 : 1);
+      if (done) break;
+      if (Clock::now() > until) throw OmcError("the omc script did not finish in time");
+      std::this_thread::sleep_for(300ms);
+    }
+    const std::string text = impl_->control_call(fd, "logs", {{"lease", id}}).value("text", "");
+    impl_->control_call(fd, "release", {{"lease", id}});
+    close_fd();
+    return {code, impl_->from_omc(text)};
+  } catch (...) {
+    close_fd();
+    throw;
   }
-  return "";
-#endif
-}
-
-// Why a native omc can't build FMUs, or "": every file of its FMU build project must be
-// readable (OpenModelica nightlies have shipped config.guess and config.sub root-only).
-std::string unhealthy(const std::string& omc) {
-#ifdef _WIN32
-  (void)omc;  // the root-only files are a Linux nightly's packaging; the Windows installer's are readable
-  return "";
-#else
-  std::error_code ec;
-  const fs::path project = fs::canonical(omc, ec).parent_path().parent_path() / "share/omc/runtime/c/fmi/buildproject";
-  if (ec || !fs::is_directory(project, ec)) return "";
-  for (const auto& e : fs::directory_iterator(project, ec))
-    if (e.is_regular_file() && access(e.path().c_str(), R_OK) != 0)
-      return e.path().string() + " is not readable, so omc can't build FMUs";
-  return "";
-#endif
-}
-}  // namespace
-
-OmcRuntime resolve_omc() {
-  const auto env = [](const char* k) { const char* v = std::getenv(k); return std::string(v ? v : ""); };
-  for (const char* k : {"SQUERO_OMC_BIN", "PAPERBOAT_OMC_BIN"})
-    if (!env(k).empty()) return {"native", env(k), ""};
-#ifdef _WIN32
-  // Native only: the container modes mount the host's /tmp and $HOME at the same paths and run as
-  // its uid, which a Windows host has none of. The OpenModelica installer sets OPENMODELICAHOME.
-  if (const std::string native = which("omc"); !native.empty()) return {"native", native, ""};
-  if (const std::string home = env("OPENMODELICAHOME"); !home.empty()) {
-    const fs::path omc = fs::path(home) / "bin" / "omc.exe";
-    if (fs::is_regular_file(omc)) return {"native", omc.string(), ""};
-  }
-  return {"native", "omc", "no omc on PATH and no OPENMODELICAHOME: install OpenModelica (podman and docker are not used on Windows)"};
-#else
-  const std::string force = env("SQUERO_OMC");
-  const std::string native = which("omc");
-  const std::string engine = force == "docker" ? which("docker") : force == "podman" ? which("podman")
-                             : !which("podman").empty() ? which("podman") : which("docker");
-  const std::string engine_mode = engine.empty() ? "" : fs::path(engine).filename().string();
-  if (force == "native") return {"native", native.empty() ? "omc" : native, ""};
-  if ((force == "podman" || force == "docker") && !engine.empty()) return {engine_mode, engine, ""};
-  const std::string sick = native.empty() ? "no omc on PATH" : unhealthy(native);
-  if (!native.empty() && sick.empty()) return {"native", native, ""};
-  if (!engine.empty()) return {engine_mode, engine, sick};
-  return {"native", native.empty() ? "omc" : native, sick + (native.empty() ? ", and no podman or docker to run it in" : "")};
-#endif
-}
-
-std::vector<std::string> omc_command(const OmcRuntime& rt, const std::string& workdir, const std::vector<std::string>& args,
-                                     const std::string& name) {
-  std::vector<std::string> out;
-  if (rt.mode == "native") {
-    out.push_back(rt.exe);
-  } else {
-    const char* home = std::getenv("HOME");
-    const std::string h = home ? home : "/root";
-    const std::string tmp = fs::temp_directory_path().string();
-    out = {rt.exe, "run", "--rm", "-i", "--init", "--network=host", "--security-opt", "label=disable", "-e", "HOME=" + h,
-           "-e", "USER=" + std::string(std::getenv("USER") ? std::getenv("USER") : "omc"), "-v", tmp + ":" + tmp, "-v", h + ":" + h, "-w", workdir};
-    // A stable name lets a stopping Studio remove the container even when podman's client is
-    // gone (omc is the init process inside, so SIGTERM to the client may not reach it).
-    if (!name.empty()) out.insert(out.begin() + 2, {"--name", name, "--label", "paperboat.omc=1"});
-    // --init: omc as PID 1 ignores SIGTERM, so the container outlived us
-    // files omc writes are the user's: podman maps the user in, docker runs as them
-    if (rt.mode == "podman") out.insert(out.begin() + 2, "--userns=keep-id");
-#ifndef _WIN32  // never reached on Windows: resolve_omc is native there
-    else out.insert(out.begin() + 2, {"--user", std::to_string(getuid()) + ":" + std::to_string(getgid())});
-#endif
-    if (tmp != "/tmp") out.insert(out.end() - 2, {"-v", "/tmp:/tmp"});
-    out.push_back(kImage);
-    out.push_back("omc");
-  }
-  out.insert(out.end(), args.begin(), args.end());
-  return out;
 }
 
 // --- allow-list ---
@@ -782,4 +621,4 @@ std::string quote(std::string_view text) {
   return out + '"';
 }
 
-}  // namespace squero
+}  // namespace articula

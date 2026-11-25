@@ -22,9 +22,9 @@
 #include <string_view>
 #include <vector>
 
-#include "squero/omc.hpp"
+#include "articula/omc.hpp"
 
-namespace squero {
+namespace articula {
 
 struct GenerateError : std::runtime_error {
   using std::runtime_error::runtime_error;
@@ -35,7 +35,7 @@ struct GenerateOptions {
   std::string model = {};        // its qualified class; "" = the one class the file has
   std::filesystem::path out = {};  // "" = ./<model>-cpp
   std::string path = "auto";     // "auto", "ode" or "fmu"
-  // Studio's preview (squero/0 `generate` with dry): nothing touches the disk. The files that
+  // Studio's preview (articula/0 `generate` with dry): nothing touches the disk. The files that
   // would be written come back in GenerateResult::files; the fmu path builds nothing, so no files.
   bool dry = false;
   // Studio: generate the class as loaded in omc (unsaved edits included), never reloading `source`;
@@ -77,4 +77,4 @@ std::string station_name(std::string_view model);
 // variable (der: its derivative). Throws GenerateError naming what it can't translate.
 std::string to_cpp(std::string_view expr, const std::function<std::string(std::string_view name, bool der)>& name);
 
-}  // namespace squero
+}  // namespace articula

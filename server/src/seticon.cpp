@@ -1,4 +1,4 @@
-// IconDef → Modelica Icon(graphics) (squero/0 `set_icon`), the inverse of quantise_icon in icon.cpp.
+// IconDef → Modelica Icon(graphics) (articula/0 `set_icon`), the inverse of quantise_icon in icon.cpp.
 // Every token becomes one fixed Modelica value, chosen so the importer reads it back as the same
 // token (the Wave 2 goldens round-trip). The one lossy corner: text holding {param} comes back
 // mono, as the importer always draws parameter text.
@@ -6,9 +6,9 @@
 #include <cmath>
 #include <string>
 
-#include "squero/import.hpp"
+#include "articula/import.hpp"
 
-namespace squero {
+namespace articula {
 namespace {
 
 using nlohmann::json;
@@ -126,4 +126,4 @@ std::string icon_annotation(const json& icon) {
   return out + "})";
 }
 
-}  // namespace squero
+}  // namespace articula

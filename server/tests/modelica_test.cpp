@@ -16,13 +16,13 @@
 #include <string>
 #include <vector>
 
-#include "squero/generate.hpp"
-#include "squero/import.hpp"
-#include "squero/omc.hpp"
-#include "squero/squero.hpp"
+#include "articula/generate.hpp"
+#include "articula/import.hpp"
+#include "articula/omc.hpp"
+#include "articula/server.hpp"
 #include <toml++/toml.hpp>
 
-namespace mo = squero;
+namespace mo = articula;
 namespace fs = std::filesystem;
 using nlohmann::json;
 
@@ -33,19 +33,17 @@ static std::string read_text(const fs::path& file) {
   return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
-// A native omc the tests can drive. Windows has no `command -v`: ask the server's own lookup
-// (PATH, then %OPENMODELICAHOME%\bin), which is native-only there.
+// omc comes from paperboatd (the omc runtime): $PAPERBOATD, or paperboatd on PATH.
 static bool have_omc() {
-#ifdef _WIN32
-  return mo::resolve_omc().why.empty();
-#else
-  return std::system("command -v omc >/dev/null 2>&1") == 0;
-#endif
+  return std::getenv("PAPERBOATD") || std::system("command -v paperboatd >/dev/null 2>&1") == 0;
 }
 
+// The tests write their models under the temp folder: that is the project omc sees.
+static mo::Omc::Options in_tmp() { return {.project = fs::temp_directory_path()}; }
+
 #ifndef PAPERBOAT_TEST_DATA
-#ifdef SQUERO_TEST_DATA
-#define PAPERBOAT_TEST_DATA SQUERO_TEST_DATA
+#ifdef ARTICULA_TEST_DATA
+#define PAPERBOAT_TEST_DATA ARTICULA_TEST_DATA
 #else
 #define PAPERBOAT_TEST_DATA "tests/data"
 #endif
@@ -66,7 +64,7 @@ TEST_CASE("omc answers parse into lists, strings and atoms", "[modelica]") {
   CHECK_THROWS_AS(mo::parse_value("{a, b"), mo::OmcError);
 }
 
-TEST_CASE("squero/0 passes only allow-listed calls", "[modelica]") {
+TEST_CASE("articula/0 passes only allow-listed calls", "[modelica]") {
   CHECK(mo::allowed("getClassNames()"));
   CHECK(mo::allowed("getClassNames(recursive=true)"));
   CHECK(mo::allowed(R"(loadFile("/tmp/a b;c.mo"))"));
@@ -136,7 +134,7 @@ equation
 end Bounce;
 )";
   }
-  mo::Omc omc;
+  mo::Omc omc(in_tmp());
   const auto r = mo::generate(omc, {.source = dir / "Decay.mo", .out = dir / "decay-cpp"});
   CHECK(r.path == "ode");
   CHECK(r.name == "decay");
@@ -406,7 +404,7 @@ TEST_CASE("Icon(graphics) quantiser maps primitives, drops Bitmap/DynamicSelect,
 
 TEST_CASE("live omc importer matches MSL goldens and resolves array, if, and fallback connectors", "[modelica][omc]") {
   if (!have_omc()) SKIP("omc not installed");
-  mo::Omc omc;
+  mo::Omc omc(in_tmp());
 
   const std::pair<const char*, const char*> msl_cases[] = {
       {"Resistor", "Modelica.Electrical.Analog.Basic.Resistor"},
@@ -421,8 +419,9 @@ TEST_CASE("live omc importer matches MSL goldens and resolves array, if, and fal
     CHECK(live == read_golden(stem));
   }
 
-  // Local fixture with Pin p[n] and `if useHeatPort`.
-  const fs::path bus_mo = fs::path(PAPERBOAT_TEST_DATA) / "modelica" / "BusNode.mo";
+  // Local fixture with Pin p[n] and `if useHeatPort`, copied where omc sees files (the project).
+  const fs::path bus_mo = fs::temp_directory_path() / "articula-BusNode.mo";
+  fs::copy_file(fs::path(PAPERBOAT_TEST_DATA) / "modelica" / "BusNode.mo", bus_mo, fs::copy_options::overwrite_existing);
   const auto bus = mo::import_model(omc, bus_mo);
   check_contract_tokens(bus.to_json());
   REQUIRE(bus.icon["ports"].size() == 3);
@@ -463,7 +462,7 @@ end CustomThermal;
   fs::remove_all(tmp);
 }
 
-// --- squero/0 ops (#160 Wave 3) ---
+// --- articula/0 ops (#160 Wave 3) ---
 
 namespace {
 
@@ -473,7 +472,7 @@ json op(mo::Omc& omc, json request, const mo::Session& session = {}) {
 
 }  // namespace
 
-TEST_CASE("set_icon writes tokens as fixed Modelica values and refuses what it can't", "[squero]") {
+TEST_CASE("set_icon writes tokens as fixed Modelica values and refuses what it can't", "[articula]") {
   const json icon = {{"w", 2},
                      {"g", {{{"t", "rect"}, {"x", 15}, {"y", 35}, {"w", 70}, {"h", 30}, {"fill", "raised"}, {"corner", "md"}},
                             {{"t", "line"}, {"p", {{5, 50}, {15, 50}}}, {"weight", "wire"}, {"dash", "axis"}},
@@ -497,9 +496,9 @@ TEST_CASE("set_icon writes tokens as fixed Modelica values and refuses what it c
   CHECK(op(omc, {{"id", 3}, {"op", "simulate"}, {"model", "M"}, {"stop", -1}})["ok"] == false);
 }
 
-TEST_CASE("set_icon round-trips the Wave 2 icon goldens through omc", "[squero][omc]") {
+TEST_CASE("set_icon round-trips the Wave 2 icon goldens through omc", "[articula][omc]") {
   if (!have_omc()) SKIP("omc not installed");
-  mo::Omc omc;
+  mo::Omc omc(in_tmp());
   for (const char* stem : {"Resistor", "Inductor", "Capacitor", "Ground", "Inertia"}) {
     INFO(stem);
     const json golden = read_golden(stem)["icon"];
@@ -520,7 +519,7 @@ TEST_CASE("set_icon round-trips the Wave 2 icon goldens through omc", "[squero][
   }
 }
 
-TEST_CASE("icon, generate (dry, with progress) and simulate answer over handle", "[squero][omc]") {
+TEST_CASE("icon, generate (dry, with progress) and simulate answer over handle", "[articula][omc]") {
   if (!have_omc()) SKIP("omc not installed");
   const fs::path dir = fs::temp_directory_path() / "paperboat-squero-test";
   fs::remove_all(dir);
@@ -533,7 +532,7 @@ equation
   der(x) = -k * x;
 end Decay;
 )";
-  mo::Omc omc;
+  mo::Omc omc(in_tmp());
   std::vector<json> pushed;
   const mo::Session session{[&](const std::string& text) { pushed.push_back(json::parse(text)); }, file};
 
@@ -592,7 +591,7 @@ end Lag;
   CHECK(u.front().get<double>() == 0.0);
   CHECK(u.back().get<double>() == Catch::Approx(3.0));
   CHECK(lag["result"]["series"]["y"].back().get<double>() == Catch::Approx(3.0 * (1 - std::exp(-1.0))).epsilon(0.01));
-  CHECK(op(omc, {{"id", 8}, {"op", "omc"}, {"expr", "getClassNames()"}}, session)["result"].get<std::string>().find("SqueroSimHarness") ==
+  CHECK(op(omc, {{"id", 8}, {"op", "omc"}, {"expr", "getClassNames()"}}, session)["result"].get<std::string>().find("ArticulaSimHarness") ==
         std::string::npos);  // the harness is gone
   CHECK(op(omc, {{"id", 9}, {"op", "simulate"}, {"model", "Lag"}, {"stop", 1.0}, {"inputs", {{"u", {{"kind", "noise"}}}}}}, session)["error"]
             .get<std::string>()
@@ -610,7 +609,7 @@ end Lag;
   fs::remove_all(dir);
 }
 
-TEST_CASE("workspace lists the model folder's classes and packages", "[squero]") {
+TEST_CASE("workspace lists the model folder's classes and packages", "[articula]") {
   const fs::path dir = fs::temp_directory_path() / "paperboat-squero-workspace";
   fs::remove_all(dir);
   fs::create_directories(dir / "Pkg" / "Sub");
@@ -652,7 +651,7 @@ TEST_CASE("workspace lists the model folder's classes and packages", "[squero]")
   fs::remove_all(dir);
 }
 
-TEST_CASE("create_class writes a class and keeps package.order in step", "[squero]") {
+TEST_CASE("create_class writes a class and keeps package.order in step", "[articula]") {
   const fs::path dir = fs::temp_directory_path() / "paperboat-squero-new-class";
   fs::remove_all(dir);
   fs::create_directories(dir / "Pkg");
@@ -691,7 +690,7 @@ TEST_CASE("create_class writes a class and keeps package.order in step", "[squer
   fs::remove_all(dir);
 }
 
-TEST_CASE("rename_class renames the file and the class and keeps its package.order place", "[squero]") {
+TEST_CASE("rename_class renames the file and the class and keeps its package.order place", "[articula]") {
   const fs::path dir = fs::temp_directory_path() / "paperboat-squero-rename";
   fs::remove_all(dir);
   fs::create_directories(dir / "Pkg");
@@ -715,7 +714,7 @@ TEST_CASE("rename_class renames the file and the class and keeps its package.ord
   fs::remove_all(dir);
 }
 
-TEST_CASE("packages and class files can be created, duplicated and deleted", "[squero]") {
+TEST_CASE("packages and class files can be created, duplicated and deleted", "[articula]") {
   const fs::path dir = fs::temp_directory_path() / "paperboat-squero-package-ops";
   fs::remove_all(dir);
   fs::create_directories(dir / "Pkg");
@@ -770,7 +769,7 @@ TEST_CASE("packages and class files can be created, duplicated and deleted", "[s
   fs::remove_all(dir);
 }
 
-TEST_CASE("opening a class inside a package loads the package chain", "[squero][omc]") {
+TEST_CASE("opening a class inside a package loads the package chain", "[articula][omc]") {
   if (!have_omc()) SKIP("omc not installed");
   const fs::path dir = fs::temp_directory_path() / "paperboat-squero-package-open";
   fs::remove_all(dir);
@@ -781,7 +780,7 @@ TEST_CASE("opening a class inside a package loads the package chain", "[squero][
   std::ofstream(dir / "Pkg" / "Sub" / "package.order") << "B\n";
   std::ofstream(dir / "Pkg" / "Sub" / "B.mo") << "within Pkg.Sub;\nmodel B\n  Real x(start = 1, fixed = true);\nequation\n  der(x) = -x;\nend B;\n";
 
-  mo::Omc omc;
+  mo::Omc omc(in_tmp());
   const json opened = op(omc, {{"id", 1}, {"op", "open"}, {"file", (dir / "Pkg" / "Sub" / "B.mo").string()}});
   INFO(opened.dump());
   REQUIRE(opened["ok"] == true);
@@ -790,7 +789,7 @@ TEST_CASE("opening a class inside a package loads the package chain", "[squero][
   fs::remove_all(dir);
 }
 
-TEST_CASE("check_model, messages and the flat model answer over handle", "[squero][omc]") {
+TEST_CASE("check_model, messages and the flat model answer over handle", "[articula][omc]") {
   if (!have_omc()) SKIP("omc not installed");
   const fs::path dir = fs::temp_directory_path() / "paperboat-squero-messages";
   fs::remove_all(dir);
@@ -811,7 +810,7 @@ equation
 end Bad;
 )";
 
-  mo::Omc omc;
+  mo::Omc omc(in_tmp());
   std::vector<mo::OmcMessage> logged;
   omc.on_log([&](const mo::OmcMessage& message) { logged.push_back(message); });
   const mo::Session session{nullptr, good};
@@ -854,7 +853,7 @@ end Bad;
   fs::remove_all(dir);
 }
 
-TEST_CASE("the allow-list has what the canvas reads and edits, and nothing that writes elsewhere", "[squero]") {
+TEST_CASE("the allow-list has what the canvas reads and edits, and nothing that writes elsewhere", "[articula]") {
   CHECK(mo::allowed(R"(getComponentModifierNames(M, "R1"))"));
   CHECK(mo::allowed("getNthConnectionAnnotation(M, 1)"));
   CHECK(mo::allowed("getClassRestriction(Modelica.Electrical.Analog.Basic.Resistor)"));
@@ -862,14 +861,14 @@ TEST_CASE("the allow-list has what the canvas reads and edits, and nothing that 
   CHECK(mo::allowed("updateComponent(R1, A.B, M, annotate=Placement(visible=true, transformation=transformation(origin={1, 2}, "
                     "extent={{-10, -10}, {10, 10}}, rotation=90)))"));
   CHECK(mo::allowed("setParameterValue(M, k, 3)"));
-  // saving, simulating and the icon annotation are squero/0 ops of their own, confined to the user's model
+  // saving, simulating and the icon annotation are articula/0 ops of their own, confined to the user's model
   CHECK_FALSE(mo::allowed("save(M)"));
   CHECK_FALSE(mo::allowed("simulate(M, stopTime=1)"));
   CHECK_FALSE(mo::allowed("addClassAnnotation(M, annotate=Icon())"));
   CHECK_FALSE(mo::allowed("writeFile(\"/tmp/x\", \"y\")"));
 }
 
-TEST_CASE("visual_shapes reads omc's _visual.xml", "[squero]") {
+TEST_CASE("visual_shapes reads omc's _visual.xml", "[articula]") {
   const std::string xml = R"(<visualization>
   <shape>
       <ident>body.shape</ident>
@@ -887,7 +886,7 @@ TEST_CASE("visual_shapes reads omc's _visual.xml", "[squero]") {
   </shape>
 </visualization>)";
   // a variable resolves to its series name, a parameter to its value
-  const json shapes = squero::visual_shapes(xml, [](const std::string& c) { return c == "body.length" ? json(0.5) : json(c); });
+  const json shapes = articula::visual_shapes(xml, [](const std::string& c) { return c == "body.length" ? json(0.5) : json(c); });
   REQUIRE(shapes.size() == 1);
   CHECK(shapes[0]["ident"] == "body.shape");
   CHECK(shapes[0]["type"] == "box");
@@ -898,17 +897,17 @@ TEST_CASE("visual_shapes reads omc's _visual.xml", "[squero]") {
   CHECK(shapes[0]["color"][0] == 255.0);
 }
 
-TEST_CASE("with no model named, the Studio opens its own folder", "[squero]") {
+TEST_CASE("with no model named, the Studio opens its own folder", "[articula]") {
   const auto dir = std::filesystem::temp_directory_path() / "squero-default-workspace-test";
   std::filesystem::remove_all(dir);
   // A fresh folder is created and opens a new Untitled model.
-  CHECK(squero::default_file(dir) == dir / "Untitled.mo");
+  CHECK(articula::default_file(dir) == dir / "Untitled.mo");
   CHECK(std::filesystem::is_directory(dir));
   // Otherwise the first model in it, never its package.mo.
   std::ofstream(dir / "package.mo") << "package P\nend P;\n";
   std::ofstream(dir / "b.mo") << "model b\nend b;\n";
   std::ofstream(dir / "a.mo") << "model a\nend a;\n";
-  CHECK(squero::default_file(dir) == dir / "a.mo");
+  CHECK(articula::default_file(dir) == dir / "a.mo");
   std::filesystem::remove_all(dir);
-  CHECK(squero::default_workspace().filename() == (std::getenv("SQUERO_OM_WORKSPACE") ? squero::default_workspace().filename() : "om"));
+  CHECK(articula::default_workspace().filename() == (std::getenv("ARTICULA_WORKSPACE") ? articula::default_workspace().filename() : "articula"));
 }

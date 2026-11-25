@@ -1,22 +1,23 @@
 #pragma once
 
-// The OpenModelica compiler as a long-lived process (#160 contracts §5): one
-// `omc --interactive=zmq -z=<session>` per Omc, spoken to over ZeroMQ REQ/REP. One request
-// in flight at a time; a request that times out or finds omc dead restarts it (replaying the
+// The OpenModelica compiler as a long-lived session: the `omc` runtime's session mode, leased from
+// paperboatd (paperboat/docs/control.md) and spoken to in paperboat-runtime/0 (`eval` per expression).
+// The workspace is the lease's project; host paths in an expression become the paths omc sees
+// (/work/project, /work/out, /work/deps) and come back as host paths in its answer. One request in
+// flight at a time; a request that times out or finds omc gone starts a new session (replaying the
 // libraries and files it had loaded), and after 3 restarts in a row the bridge is `failed`.
-//
-// libzmq is opened at run time (libzmq.so.5, which omc itself ships), so building this needs
-// no ZeroMQ headers; only running it needs omc.
 
 #include <chrono>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
-namespace squero {
+namespace articula {
 
 struct OmcError : std::runtime_error {
   using std::runtime_error::runtime_error;
@@ -37,7 +38,8 @@ struct OmcMessage {
 class Omc {
  public:
   struct Options {
-    std::string omc = "";                             // the executable; empty: resolve_omc() picks one
+    std::string runtime = "omc@1.27";                 // the paperboatd runtime
+    std::filesystem::path project = {};               // the workspace: mounted for omc, writable
     std::chrono::milliseconds timeout{30'000};        // per request
     int max_restarts = 3;                             // in a row, then failed
   };
@@ -50,9 +52,11 @@ class Omc {
   Omc(const Omc&) = delete;
   Omc& operator=(const Omc&) = delete;
 
-  /** Stop omc now, without waiting for the destructor: used on SIGTERM/SIGINT so a stopped
-      Studio does not leave its native process or container behind. */
+  /** Release omc now, without waiting for the destructor (SIGTERM/SIGINT). */
   void shutdown();
+  /** End the call in flight (a long simulate): it fails with "cancelled", and the next call
+      starts a new session. Safe from any thread. */
+  void cancel();
 
   // Evaluates one omc expression, e.g. `checkModel(M)`, and returns omc's answer as text
   // (`true`, `"…"`, `{…}`), without the trailing newline. Starts omc on first use. Throws
@@ -81,9 +85,14 @@ class Omc {
   // Called for each drained message, in order, so a server can stream omc's log.
   void on_log(LogFn fn);
 
-  // The folder omc runs in (its build output and dumps land here).
+  // The folder omc runs in, as the host sees it (the lease's work folder: builds, results, dumps).
   std::string workdir() const;
-  // How omc runs: "native", "podman" or "docker" (resolve_omc()).
+  // Runs a .mos script in a short omc of its own (an exec lease on the same project and package volume),
+  // with the network for that step when asked (installing libraries): {exit code, its output}.
+  std::pair<int, std::string> script(const std::string& mos, bool network, std::chrono::milliseconds timeout);
+  // A host path as omc sees it (/work/out/… in a container; the same path natively).
+  std::string omc_path(const std::string& host) const;
+  // Where omc runs: the lease's backend, "podman", "docker" or "native".
   std::string mode() const;
 
  private:
@@ -91,27 +100,7 @@ class Omc {
   std::unique_ptr<Impl> impl_;
 };
 
-// Where omc comes from (#2), first that holds:
-//   1. $SQUERO_OMC_BIN or $PAPERBOAT_OMC_BIN;
-//   2. `omc` on PATH whose install can build FMUs (its runtime files are readable);
-//   3. podman, else docker: kImage with the host's /tmp and $HOME at the same paths, as the
-//      user (keep-id / --user), no SELinux relabel (label=disable), host network for omc's
-//      ZeroMQ port; pulled on first use;
-//   4. `omc` on PATH anyway, with `why` saying what's wrong with it.
-// $SQUERO_OMC=native|podman|docker forces one.
-inline constexpr const char* kImage = "docker.io/openmodelica/openmodelica:v1.27.1-minimal";
-struct OmcRuntime {
-  std::string mode;              // native | podman | docker
-  std::string exe;               // omc, or the container engine
-  std::string why;               // why not the better choice, or ""
-};
-OmcRuntime resolve_omc();
-// The argv that starts omc under `rt`, in `workdir`, with omc's own `args`. `name` names the
-// container (podman/docker only), so a later `rm -f <name>` can stop it.
-std::vector<std::string> omc_command(const OmcRuntime& rt, const std::string& workdir, const std::vector<std::string>& args,
-                                    const std::string& name = {});
-
-// Whether `expr` may come from a Studio client over squero/0: one call to a function on the
+// Whether `expr` may come from a Studio client over articula/0: one call to a function on the
 // allow-list (contracts §5), whose nested calls are allow-listed too or are annotation
 // records (capitalised: Placement(…), Line(…)) or their `transformation`s. No `;`, no `:=`.
 bool allowed(std::string_view expr);
@@ -131,9 +120,9 @@ struct OmValue {
 OmValue parse_value(std::string_view text);  // throws OmcError on malformed text
 std::string quote(std::string_view text);    // a Modelica string literal
 
-}  // namespace squero
+}  // namespace articula
 
 namespace paperboat::modelica {
-using namespace squero;
+using namespace articula;
 }
 

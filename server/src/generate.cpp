@@ -1,7 +1,7 @@
-#include "squero/generate.hpp"
+#include "articula/generate.hpp"
 
-#include "squero/import.hpp"
-#include "squero/squero.hpp"
+#include "articula/import.hpp"
+#include "articula/server.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -15,7 +15,7 @@
 #include <set>
 #include <sstream>
 
-namespace squero {
+namespace articula {
 namespace {
 
 namespace fs = std::filesystem;
@@ -1608,4 +1608,4 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
   return r;
 }
 
-}  // namespace squero
+}  // namespace articula

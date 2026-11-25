@@ -1,4 +1,4 @@
-#include "squero/import.hpp"
+#include "articula/import.hpp"
 
 #include <algorithm>
 #include <array>
@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace squero {
+namespace articula {
 namespace {
 
 namespace fs = std::filesystem;
@@ -796,4 +796,4 @@ ImportedModel import_model(Omc& omc, const fs::path& source, std::string_view cl
   return import_class(omc, target);
 }
 
-}  // namespace squero
+}  // namespace articula

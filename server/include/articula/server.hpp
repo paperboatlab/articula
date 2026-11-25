@@ -1,6 +1,6 @@
 #pragma once
 
-// Squero Studio OM's server (#160 contracts §5): protocol squero/0 over WebSocket, separate
+// Articula's server (#160 contracts §5): protocol articula/0 over WebSocket, separate
 // from paperboat/0. One omc for the process, shared by every client:
 //
 //   client → {"id": 1, "op": "omc", "expr": "getClassNames()"}
@@ -27,7 +27,7 @@
 //   delete_package {dir, root}                 → {dir}              remove a package folder inside the workspace
 //   move_class {file, targetDir, within?}      → {file, model}      move a class to another package, rewrite `within`
 //   read_file {file}                           → {text}             the .mo file's own text, for the editor
-//   config    {}                                → {path, text|null}  the user's squero.toml (shared with MX), null when absent
+//   config    {}                                → {path, text|null}  the user's articula.toml, null when absent
 //   config_write {text}                        → {path}             write it, making the folder
 //   save      {model}                           → {file}             `save(model)`: the model's own .mo
 //   icon      {class}                           → {icon, connectors, notice}
@@ -53,9 +53,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "squero/omc.hpp"
+#include "articula/omc.hpp"
 
-namespace squero {
+namespace articula {
 
 // What a handler may do besides answer: push a message to its client (progress), and which .mo
 // the server was started on.
@@ -64,7 +64,7 @@ struct Session {
   std::filesystem::path file = {};
 };
 
-// One squero/0 message handled; returns the reply (empty for a message that wants none).
+// One articula/0 message handled; returns the reply (empty for a message that wants none).
 std::string handle(Omc& omc, const std::string& message, const Session& session = {});
 
 // omc's <model>_visual.xml (-d=visxml) as [{ident, type, T[9], r[3], r_shape[3], lengthDir[3],
@@ -72,16 +72,20 @@ std::string handle(Omc& omc, const std::string& message, const Session& session 
 // variable that drives it as `resolve` says (a cref → its series name, or a number when constant).
 nlohmann::json visual_shapes(const std::string& xml, const std::function<nlohmann::json(const std::string&)>& resolve);
 
-// The Studio's own folder: $SQUERO_OM_WORKSPACE, else ~/Documents/paperboat/squero/om.
+// The workspace omc sees for `file` (a folder or a .mo): its folder, or the folder holding its top
+// package. Mounted as the omc lease's project.
+std::filesystem::path workspace_of(const std::filesystem::path& file);
+
+// Articula's own folder: $ARTICULA_WORKSPACE, else ~/Documents/paperboat/articula.
 std::filesystem::path default_workspace();
 
 // What opens when no model is named: the first .mo in `dir` (not package.mo), else dir/Untitled.mo.
 // Creates `dir`; the model itself is created by `open` when it doesn't exist.
 std::filesystem::path default_file(const std::filesystem::path& dir = default_workspace());
 
-// Serves until killed. Returns 1 when the port can't be taken. port 0 = first free of 59201..59299. `file` is the .mo to open
+// Serves until killed. Returns 1 when the port can't be taken. port 0 = first free of 59240..59259. `file` is the .mo to open
 // (created as a stub model when it doesn't exist); empty = default_file().
-int serve_squero(int port, const std::filesystem::path& app = {}, Omc::Options options = {},
+int serve_articula(int port, const std::filesystem::path& app = {}, Omc::Options options = {},
                  const std::filesystem::path& file = {});
 
-}  // namespace squero
+}  // namespace articula

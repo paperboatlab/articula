@@ -91,6 +91,7 @@ struct ImportedModel {
   ImportNotice notice{};
   IconExtent extent{};               // raw Icon coordinateSystem extent (for generator re-quantisation)
   std::vector<RawPort> raw_ports{};  // raw resolved connector ports before edge-slot quantisation
+  nlohmann::json art = nlohmann::json::array();  // icon_art: the graphics unquantised (not in to_json)
 
   nlohmann::json to_json() const;  // {icon, connectors, notice}
 };
@@ -114,6 +115,10 @@ std::vector<IconPort> quantise_ports(const std::vector<RawPort>& raw, ImportNoti
 // into a token-only `IconDef` JSON object (`view.icon`).
 nlohmann::json quantise_icon(const std::vector<OmValue>& icon_annotations, const std::vector<IconPort>& ports,
                              ImportNotice& notice, IconExtent* out_extent = nullptr);
+
+// The same annotations kept whole, for an app that draws them itself (articula#18): one layer per
+// annotation, `{extent: [x1, y1, x2, y2], g: [graphic records]}`, in Modelica coordinates.
+nlohmann::json icon_art(const std::vector<OmValue>& icon_annotations);
 
 // Walks `class_name` and its `extends` bases in `omc` to collect connector instances and
 // resolve each connector class's variables, units and Contract §4 handle definition.

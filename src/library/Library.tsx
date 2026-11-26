@@ -6,6 +6,7 @@ import { BlockIcon } from "@paperboatlab/ui/canvas";
 import { type IconDef, type IconPort } from "@paperboatlab/ui/canvas";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import type { OmcClient } from "../omc/omc.ts";
+import { IconArt, type ArtLayer } from "../icon/art.tsx";
 import { atom, list, parseValue } from "../omc/parse.ts";
 import {
   DEFAULT_MSL_CLASSES,
@@ -37,6 +38,7 @@ export function Thumb({
   onLoaded?: (ports?: IconPort[]) => void;
 }) {
   const [icon, setIcon] = useState<IconDef>();
+  const [art, setArt] = useState<ArtLayer[]>();
   const [seen, setSeen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
 
@@ -60,11 +62,12 @@ export function Thumb({
     if (!seen) return;
     let live = true;
     omc
-      .op<{ icon?: IconDef }>("icon", { class: cls })
+      .op<{ icon?: IconDef; art?: ArtLayer[] }>("icon", { class: cls })
       .then(
         (r) => {
           if (!live) return;
           setIcon(r.icon);
+          setArt(r.art);
           if (r.icon?.ports) onLoaded?.(r.icon.ports);
         },
         () => undefined,
@@ -76,7 +79,7 @@ export function Thumb({
 
   return (
     <span className="thumb" ref={box}>
-      {icon ? <BlockIcon icon={icon} type={cls} fill={(t) => (t.includes("{") ? "" : t)} /> : null}
+      {icon && art?.length ? <IconArt art={art} icon={icon} /> : icon ? <BlockIcon icon={icon} type={cls} fill={(t) => (t.includes("{") ? "" : t)} /> : null}
     </span>
   );
 }

@@ -800,7 +800,9 @@ json op_icon(Omc& omc, const json& in) {
     if (const auto it = cache.find(cls); it != cache.end()) return it->second;
   }
   ensure_library(omc, cls);
-  json out = import_class(omc, cls).to_json();
+  const ImportedModel imp = import_class(omc, cls);
+  json out = imp.to_json();
+  out["art"] = imp.art;
   if (is_msl(cls)) {
     std::lock_guard lock(cache_mutex);
     cache[cls] = out;

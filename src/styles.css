@@ -19,8 +19,8 @@ body { background: var(--surface-ground); color: var(--text); font: var(--size-s
 .panel-head .tabs { margin-right: auto; }
 
 /* the left card: Files | Library; a class row shows its kind as a letter */
-.rail .rail-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
-.rail .rail-body[hidden] { display: none; }
+.side-files .rail-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.side-files .rail-body[hidden] { display: none; }
 .ck { width: 14px; height: 14px; flex: none; display: inline-grid; place-items: center; border-radius: 3px; font: 600 9.5px/1 var(--font-mono); color: var(--accent-text); border: 1px solid var(--accent-select); }
 .ck.pkg { border: 0; color: var(--text-muted); }
 .library-slot { flex: 1; min-width: 0; display: flex; }
@@ -44,6 +44,7 @@ body { background: var(--surface-ground); color: var(--text); font: var(--size-s
 
 
 /* the runtimes key and its peek (as Julix's) */
+.popw { position: relative; }
 .key.rtk { position: relative; border-radius: var(--radius-md); }
 .rtk .badge { position: absolute; top: -6px; right: -7px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--surface-raised); border: 1px solid var(--accent-select); font: 600 10px/14px var(--font-mono); color: var(--accent-text); text-align: center; }
 .rtk .badge.bad { border-color: var(--danger); color: var(--danger-text); }
@@ -72,7 +73,7 @@ body { background: var(--surface-ground); color: var(--text); font: var(--size-s
 
 /* The stage's Text view: the .mo, read-only for now. The floating Run dock is a diagram control,
    so it steps aside while the code is being read. */
-.stage-text { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+.stage-text { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .stage-text .code-head { flex: none; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); min-height: var(--panel-head-height); }
 .stage-text .code-head .spacer { flex: 1; }
 .stage-text .code-view { flex: 1; min-height: 0; }
@@ -84,7 +85,7 @@ body { background: var(--surface-ground); color: var(--text); font: var(--size-s
 .studio.no-dock .dock { display: none; }
 
 /* ---- Icon view (#43): draw the look and place connectors on the stage --------------------- */
-.icon-view { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; container-type: inline-size; }
+.icon-view { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; background: var(--surface-panel); overflow: hidden; container-type: inline-size; }
 .icon-view-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .icon-tools { display: flex; flex-wrap: wrap; gap: 4px; }
 .icon-tools .studio-look-key { width: 28px; padding: 0; display: inline-grid; place-items: center; }
@@ -260,7 +261,7 @@ body.dragging-card .library {
 .tree-row.hit { color: var(--text); }
 .tree-row.hit .tree-name { font-weight: 600; }
 .tree-row.hit .tree-name::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 6px; border-radius: 50%; background: var(--signal); vertical-align: middle; }
-.tree-row.on { background: var(--surface-raised); color: var(--text); box-shadow: inset 2px 0 0 var(--line-ink); }
+.tree-row.on { background: var(--surface-raised); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
 .lib-cards-col { width: 300px; flex: none; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); }
 .lib-cards-head { display: flex; align-items: center; gap: var(--space-2); height: 41px; padding: 0 var(--space-2) 0 var(--space-3); border-bottom: 1px solid var(--line); }
 .lib-cards-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 var(--size-xs) var(--font-sans); }
@@ -489,8 +490,8 @@ body.dragging-card .library {
 /* Legacy helpers for backwards compatibility */
 
 /* Canvas */
-.canvas { position: relative; min-height: 0; min-width: 0; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; outline: none; }
-.canvas:focus-visible { border-color: var(--line-ink); }
+.canvas { position: relative; min-height: 0; min-width: 0; background: var(--surface-raised); overflow: hidden; outline: none; }
+.canvas:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .canvas .react-flow { --dots: var(--line); }
 .react-flow__node { cursor: default; }
 .wire-signal { stroke: var(--line-ink); }
@@ -516,7 +517,7 @@ body.dragging-card .library {
 .help-pop dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px var(--space-4); font-size: var(--size-xs); }
 .help-pop dt { color: var(--text-muted); }
 .help-pop dd { margin: 0; color: var(--text); }
-.notice { position: absolute; left: calc(var(--space-3) + 34px); bottom: var(--space-3); margin: 0; padding: 4px 10px; background: var(--surface-panel); border: 1.5px solid var(--danger); border-radius: var(--radius-md); color: var(--text); font: 400 var(--size-xs) var(--font-sans); max-width: 70%; white-space: pre-wrap; }
+.notice { position: absolute; left: var(--space-3); top: var(--space-3); margin: 0; padding: 4px 10px; background: var(--surface-panel); border: 1.5px solid var(--danger); border-radius: var(--radius-md); color: var(--text); font: 400 var(--size-xs) var(--font-sans); max-width: 70%; white-space: pre-wrap; }
 .quick-add { position: absolute; z-index: 60; top: 18%; left: 50%; transform: translateX(-50%); width: 340px; background: var(--surface-raised); border: 1.5px solid var(--line-ink); border-radius: var(--radius-lg); box-shadow: 0 12px 30px rgb(0 0 0 / 0.2); overflow: hidden; }
 .quick-add input { display: block; width: calc(100% - 2 * var(--space-2)); margin: var(--space-2); height: 30px; background: var(--surface-well); box-shadow: var(--well-shadow); border: 0; border-radius: var(--radius-md); padding: 0 var(--space-2); font: 400 var(--size-sm) var(--font-sans); }
 .quick-add ul { list-style: none; margin: 0; padding: 0 var(--space-1) var(--space-1); max-height: 260px; overflow: auto; }
@@ -620,8 +621,8 @@ body.dragging-card .library {
 .lib-filter::-webkit-search-cancel-button { display: none; }
 
 /* The 3D view of a MultiBody run (#44) */
-.viewport3d { flex: 1; min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--scene-bg); overflow: hidden; outline: none; }
-.viewport3d:focus-visible { border-color: var(--focus); }
+.viewport3d { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--scene-bg); overflow: hidden; outline: none; }
+.viewport3d:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .viewport3d-scene { position: relative; flex: 1; min-height: 0; overflow: hidden; }
 .viewport3d-sep { width: 1px; align-self: stretch; background: var(--line); }
 .viewport3d-bar { display: flex; align-items: center; gap: 6px; padding: 4px var(--space-2); border-bottom: 1px solid var(--line); }
@@ -640,12 +641,12 @@ body.dragging-card .library {
 
 /* ---- the right card: the source over Simulate (Focus: Source · Both · Plots) ---- */
 .simside .panel-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-.split { display: flex; flex-direction: column; min-height: 0; flex: 50 1 0; overflow: hidden; border-bottom: 1px solid var(--line); }
-.split > header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.source-pane { display: flex; flex-direction: column; min-height: 0; flex: 50 1 0; overflow: hidden; border-bottom: 1px solid var(--line); }
+.source-pane > header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
 .code-about { display: flex; align-items: center; gap: 8px; margin: 0; padding: 4px 12px 6px; font-size: 11.5px; color: var(--text-muted); }
 .code-about b { color: var(--text); font: 600 11.5px var(--font-mono); }
 .simulate { display: flex; flex-direction: column; min-height: 0; flex: 50 1 0; overflow: hidden; }
-.simside.focus-code .simulate, .simside.focus-scopes .split { display: none; }
+.simside.focus-code .simulate, .simside.focus-scopes .source-pane { display: none; }
 .sim-setup { display: flex; align-items: center; gap: 8px; padding: 8px 10px; flex: none; }
 .sim-stop { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; font: var(--size-2xs) var(--font-mono); color: var(--text-muted); }
 .sim-stop input { all: unset; width: 48px; font: var(--size-xs) var(--font-mono); color: var(--text); text-align: right; }
@@ -677,9 +678,9 @@ body.dragging-card .library {
 
 /* the library in its card: the package tree over the chosen package's components (OMEdit's browser,
    with a search over names, ports and docs) */
-.rail .library { flex: 1; min-height: 0; flex-direction: column; border: 0; border-radius: 0; background: none; }
-.rail .lib-tree-col { width: auto; flex: 1 1 50%; min-height: 0; }
-.rail .lib-cards-col { width: auto; flex: 1 1 50%; min-height: 0; border-left: 0; border-top: 1px solid var(--line); }
+.side-files .library { flex: 1; min-height: 0; flex-direction: column; border: 0; border-radius: 0; background: none; }
+.side-files .lib-tree-col { width: auto; flex: 1 1 50%; min-height: 0; }
+.side-files .lib-cards-col { width: auto; flex: 1 1 50%; min-height: 0; border-left: 0; border-top: 1px solid var(--line); }
 
 /* Solver settings (SolverSettings.tsx): solvers by family on the left, the chosen one's options right */
 .dialog.solver-settings { width: min(780px, 94vw); }

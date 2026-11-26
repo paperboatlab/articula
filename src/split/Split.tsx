@@ -63,7 +63,7 @@ export function Split({
   const shown = names.includes(file) ? file : (names.find((n) => n.endsWith(".cpp") && n.startsWith("domain/")) ?? names[0] ?? "");
 
   return (
-    <section className="split" aria-label="Source">
+    <section className="source-pane" aria-label="Source">
       <header>
         <Segmented<View> label="Source view" value={view} onChange={onView} options={OPTIONS} />
       </header>

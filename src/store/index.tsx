@@ -26,9 +26,13 @@ type PartNode = Node<{ part: PartSnap }>;
 type WireEdge = Edge<{ a: string; b: string; points?: [number, number][] }>;
 
 /** What the canvas, library and quick-add do beyond the StudioApi Lane B sees. */
+export type Notice = { text: string; failed?: boolean };
+const QUIET: Notice = { text: "" };
+
 export type Actions = {
-  notice: string;
-  say(words: string): void;
+  /** The latest word, for the Console; a failure also stands on the canvas. */
+  notice: Notice;
+  say(words: string, failed?: boolean): void;
   move(name: string, to: Placement): Promise<void>;
   /** Redraws a wire through `points` (its bends, a end first). */
   bend(wire: Connection, points: [number, number][]): Promise<void>;
@@ -87,7 +91,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
   const [model, setModel] = useState<StudioModel | null>(null);
   const [dirty, setDirty] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<Notice>(QUIET);
   const [error, setError] = useState("");
   const [stage, setStage] = useState("loading the Modelica library and opening the model");
   const looks = useRef<IconCache>(new Map());
@@ -95,7 +99,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
   current.current = model;
   const queue = useRef<Promise<unknown>>(Promise.resolve());
 
-  const say = useCallback((words: string) => setNotice(words), []);
+  const say = useCallback((words: string, failed?: boolean) => setNotice(words ? { text: words, failed } : QUIET), []);
 
   // One edit at a time: the queue keeps an undo replay and a drag from interleaving.
   const enqueue = useCallback(<T,>(job: () => Promise<T>): Promise<T> => {
@@ -129,9 +133,9 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
   const edit = useCallback(
     (exprs: string[]) =>
       enqueue(() => run(exprs)).then(
-        () => setNotice(""),
+        () => setNotice(QUIET),
         (e: Error) => {
-          setNotice(e.message);
+          setNotice({ text: e.message, failed: true });
           void enqueue(refresh); // omc may have applied some of it; show what it has
           throw e;
         },

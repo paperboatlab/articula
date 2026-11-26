@@ -804,7 +804,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
 
   return (
     <StudioContext.Provider value={api}>
-      <div className={`win studio${stageView === "text" || stageView === "icon" ? " no-dock" : ""}`}>
+      <div className={`win studio frame${stageView === "text" || stageView === "icon" ? " no-dock" : ""}`}>
         <header className="bar">
           <span className="lk"><AppMark app="articula" size={26} idle={!live} label="Articula" /><span className="wm">Articula</span></span>
           <MenuBar commands={commands} menus={MENUS} />
@@ -855,7 +855,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             </Rail>
             <Gutter label="Simulate width" size={hidden.r ? 38 : simWidth} defaultSize={420} min={320} otherMin={420}
               onSize={(w) => (setSimWidth(w), hidden.r && toggle("r", false))} onHidden={() => toggle("r", true)}>
-            <div className="mid">
+            <div className="mid bay">
               <main className="panel stage" aria-label={model.name}>
                 <EditorTabs label="Open models" current={model.file} menu={docMenu}
                   tabs={shownDocs.map((d) => ({ id: d.file, label: d.name, icon: <span className="ck ck-model">M</span>, dirty: d.file === model.file && (actions.dirty || textDirty), pinned: pinned.has(d.file), closable: shownDocs.length > 1 }))}

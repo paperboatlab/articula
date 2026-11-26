@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { ReactFlowProvider } from "@xyflow/react";
 import { CELL, CORNER, DASH, FILL, FONT, STROKE, WEIGHT, type Corner, type Dash, type Fill, type IconDef, type IconPort, type Prim, type Pt, type Stroke, type Weight } from "@paperboatlab/ui/canvas";
 import { CompactBlock } from "@paperboatlab/ui/canvas";
-import { NumberField } from "@paperboatlab/ui";
+import { Key, NumberField } from "@paperboatlab/ui";
 import { Segmented } from "@paperboatlab/ui";
 import { useStudio } from "../model/types.ts";
 import { SideSelect } from "../sheet/SideSelect.tsx";
@@ -415,47 +415,25 @@ export function IconView() {
       <header className="icon-view-bar">
         <div className="icon-tools" role="toolbar" aria-label="Drawing tools">
           {TOOLS.map((t) => (
-            <button
-              key={t.tool}
-              type="button"
-              className={`studio-look-key${tool === t.tool ? " on" : ""}`}
-              title={`${t.label} — ${t.hint}`}
-              aria-label={t.label}
-              aria-pressed={tool === t.tool}
-              disabled={t.tool === "pin" && ports.length === 0}
-              onClick={() => setTool(t.tool)}
-            >
+            <Key key={t.tool} size="sm" kind="quiet" className="icon-tool" title={`${t.label} — ${t.hint}`} aria-label={t.label} aria-pressed={tool === t.tool}
+              disabled={t.tool === "pin" && ports.length === 0} onClick={() => setTool(t.tool)}>
               <ToolIcon tool={t.tool} />
-            </button>
+            </Key>
           ))}
         </div>
-        <span className="icon-bar-sep" />
-        <button type="button" className={`studio-look-key${grid ? " on" : ""}`} aria-pressed={grid} onClick={() => setGrid((g) => !g)}>
-          grid
-        </button>
-        <button type="button" className={`studio-look-key${snap ? " on" : ""}`} aria-pressed={snap} onClick={() => setSnap((s) => !s)}>
-          snap
-        </button>
-        <span className="icon-bar-sep" />
-        <button type="button" className="studio-look-key" disabled={!selectedPrim} onClick={duplicate} title="Duplicate (Ctrl+D)">
-          duplicate
-        </button>
-        <button type="button" className="studio-look-key" disabled={!selectedPrim} onClick={() => bring("front")}>
-          front
-        </button>
-        <button type="button" className="studio-look-key" disabled={!selectedPrim} onClick={() => bring("back")}>
-          back
-        </button>
-        <button type="button" className="studio-look-key" disabled={!selectedPrim} onClick={() => selected >= 0 && (change((icon) => removePrimAt(icon, selected)), setSelected(Math.max(0, selected - 1)))}>
-          delete
-        </button>
+        <span className="sep" />
+        <Key size="sm" aria-pressed={grid} onClick={() => setGrid((g) => !g)}>Grid</Key>
+        <Key size="sm" aria-pressed={snap} onClick={() => setSnap((s) => !s)}>Snap</Key>
+        <span className="sep" />
+        <Key size="sm" disabled={!selectedPrim} onClick={duplicate} title="Duplicate (Ctrl D)">Duplicate</Key>
+        <Key size="sm" disabled={!selectedPrim} onClick={() => bring("front")}>Front</Key>
+        <Key size="sm" disabled={!selectedPrim} onClick={() => bring("back")}>Back</Key>
+        <Key size="sm" disabled={!selectedPrim} onClick={() => selected >= 0 && (change((icon) => removePrimAt(icon, selected)), setSelected(Math.max(0, selected - 1)))}>Delete</Key>
         <span className="spacer" />
         <span className="icon-count">
           {draft.g.length} shapes · {plateSizeKey(draft)}
         </span>
-        <button type="button" className="studio-save-key" disabled={!dirty} onClick={() => void save()}>
-          {saved ? "Saved" : "Save"}
-        </button>
+        <Key size="sm" kind="primary" disabled={!dirty} onClick={() => void save()}>{saved ? "Saved" : "Save"}</Key>
       </header>
       <div className="icon-view-body">
         <div className={`icon-canvas${tool === "select" ? " select" : ""}`}>
@@ -605,9 +583,7 @@ export function IconView() {
             <div className="icon-add-connector">
               <input value={connName} placeholder="name" aria-label="New connector name" onChange={(e) => setConnName(e.target.value)} />
               <input value={connClass} placeholder="class" aria-label="New connector class" onChange={(e) => setConnClass(e.target.value)} />
-              <button type="button" className="studio-look-key" disabled={connBusy} onClick={() => void addConnector()} title="Add the connector to the model, then place its pin">
-                {connBusy ? "…" : "+"}
-              </button>
+              <Key size="sm" round icon="add" busy={connBusy} disabled={connBusy} label="Add the connector to the model, then place its pin" onClick={() => void addConnector()} />
             </div>
           </section>
 

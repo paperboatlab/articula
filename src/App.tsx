@@ -5,9 +5,9 @@
 // interface sheet on Alt V, the export dock under the stage.
 
 import { ReactFlowProvider } from "@xyflow/react";
-import { About, AppMark, Key, MenuBar, Notifications, Panel, PanelsKey, Search, Segmented, Split as Gutter, ThemePicker, Toasts, readStored, useToasts, writeStored, type PaneRect, type SearchItem } from "@paperboatlab/ui";
+import { About, AppMark, Key, MenuBar, Notifications, Panel, PanelsKey, RuntimesKey, Search, Segmented, Split as Gutter, ThemePicker, Toasts, readStored, useToasts, writeStored, type PaneRect, type SearchItem } from "@paperboatlab/ui";
 import { HelpWindow } from "@paperboatlab/ui";
-import { afterClose, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
+import { afterClose, EditorTabs, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
 import { helpCommand, SEARCH_CHORD, useShortcuts, type Command } from "@paperboatlab/ui";
 import { omHelp } from "./shell/help.ts";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
@@ -27,7 +27,6 @@ import { ComponentPopover } from "./popover/index.tsx";
 import { InterfaceSheet } from "./sheet/index.tsx";
 import { IconView } from "./icon/IconView.tsx";
 import { ConfirmModal, LibraryModal, PromptModal } from "./shell/Dialogs.tsx";
-import { OmcKey } from "./shell/OmcKey.tsx";
 import { MENUS } from "./shell/menus.ts";
 import { STUDIO_VERSION } from "./version.ts";
 import { THEMES, useTheme } from "@paperboatlab/ui";
@@ -36,7 +35,6 @@ import { Simulate } from "./simulate/Simulate.tsx";
 import { Viewport3D, type ShapeRun } from "./viewport3d/Viewport3D.tsx";
 import { Split, type View } from "./split/Split.tsx";
 import { StudioConsole, type ConsoleTab } from "./shell/StudioConsole.tsx";
-import { DocTabs } from "./shell/DocTabs.tsx";
 import { Rail, type RailTab } from "./shell/Rail.tsx";
 import { TextStage, type TextEditorHandle } from "./shell/TextStage.tsx";
 import { NewClassSheet } from "./shell/NewClassSheet.tsx";
@@ -372,7 +370,6 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     setPinned((now) => new Set([...now].filter((f) => !closing.includes(f))));
     if (after.current && after.current !== current) await openDocument(after.current);
   };
-  const closeDocument = (doc: Doc) => closeDocuments([doc.file]);
   const shownDocs = orderTabs(docs.map((d) => d.file), pinned).map((f) => docs.find((d) => d.file === f)!);
   const docMenu = (file: string) => tabMenu(file, { tabs: shownDocs.map((d) => d.file), pinned, dirty: (f) => f === model?.file && (actions.dirty || textDirty) }, {
     close: (paths) => void closeDocuments(paths),
@@ -803,25 +800,29 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     ...(workspace?.entries ?? []).filter((e) => e.kind === "class").map((e): SearchItem => ({ id: `file:${e.path}`, label: e.name, group: "Files", detail: e.path.slice((workspace?.root.length ?? 0) + 1), run: () => void openDocument(e.path) })),
   ], [commands, workspace]);
   const live = running || status.state === "checking";
+  const omcVersion = /\d+\.\d+\.\d+/.exec(status.version)?.[0];
 
   return (
     <StudioContext.Provider value={api}>
       <div className={`win studio${stageView === "text" || stageView === "icon" ? " no-dock" : ""}`}>
         <header className="bar">
-          <AppMark app="articula" size={26} idle={!live} label="Articula" />
-          <span className="wm">Articula</span>
+          <span className="lk"><AppMark app="articula" size={26} idle={!live} label="Articula" /><span className="wm">Articula</span></span>
           <MenuBar commands={commands} menus={MENUS} />
           {model && hub && (
             <HubSelector hub={hub} hubs={hubs} app="Articula" onSwitch={() => setPicker("open")} onNew={newHub}
               onOpenInMalachite={() => void omc.op("hub_open_malachite", { root: hub.root }).catch((e) => fail(e, "Couldn't open Malachite"))} />
           )}
-          {model && <span className="well proj" title={model.file}>{hub ? modelFile.slice(hub.root.length + 1) : model.name}{fileDirty && <i className="dot" title="Not saved" />}</span>}
+          {model && <span className="proj" title={model.file}><u>{hub ? modelFile.slice(hub.root.length + 1) : model.name}</u>{fileDirty && <i className="dirty" title="Not saved" />}</span>}
           <span className="bend">
             {model && <Key size="sm" kind="quiet" icon="check" disabled={checking} onClick={() => void runCheck()} title="Check the model (Ctrl Shift C)">{checking ? "Checking…" : "Check"}</Key>}
             {running
               ? <Key busy onClick={() => window.dispatchEvent(new Event("articula:cancel"))} title="Cancel the simulation">Cancel</Key>
               : <Key kind="primary" icon="play" disabled={!model} onClick={() => (toggle("r", false), requestAnimationFrame(() => window.dispatchEvent(new Event("articula:simulate"))))} title="Simulate (Ctrl R)">Simulate</Key>}
-            <OmcKey status={status} running={running} onLibraries={() => setPackagesOpen(true)} />
+            <RuntimesKey scope="this workspace" runtimes={[{
+              id: "omc", name: `OpenModelica${omcVersion ? ` ${omcVersion}` : ""}`, lang: "omc", via: status.mode,
+              state: running ? "busy" : status.state === "checking" ? "starting" : status.state === "failed" ? "failed" : "idle",
+              now: running ? "simulating" : "working", note: status.state === "failed" ? "the next call starts a new session" : undefined,
+            }]} footer={(close) => <><span>Libraries live with this workspace.</span><Key size="sm" kind="quiet" icon="package" onClick={() => { close(); setPackagesOpen(true); }}>Libraries…</Key></>} />
             <PanelsKey panels={PANELS.map((p) => ({ id: p.side, label: p.name, keys: p.keys, shown: !hidden[p.side] }))} layout={LAYOUT} onToggle={(id) => toggle(id as Side)} />
             <span className="lsep" />
             <Notifications {...notes} />
@@ -856,19 +857,12 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               onSize={(w) => (setSimWidth(w), hidden.r && toggle("r", false))} onHidden={() => toggle("r", true)}>
             <div className="mid">
               <main className="panel stage" aria-label={model.name}>
-                <div className="ntabs">
-                  <DocTabs
-                    docs={shownDocs}
-                    pinned={pinned}
-                    menu={docMenu}
-                    active={model.file}
-                    dirty={actions.dirty || textDirty}
-                    onSelect={(doc) => void openDocument(doc.file)}
-                    onClose={(doc) => void closeDocument(doc)}
-                    onOpen={openPicker}
-                  />
-                  <Segmented<Stage> label="View" value={stageView} onChange={setStageView} options={stageOptions} />
-                </div>
+                <EditorTabs label="Open models" current={model.file} menu={docMenu}
+                  tabs={shownDocs.map((d) => ({ id: d.file, label: d.name, icon: <span className="ck ck-model">M</span>, dirty: d.file === model.file && (actions.dirty || textDirty), pinned: pinned.has(d.file), closable: shownDocs.length > 1 }))}
+                  onShow={(f) => void openDocument(f)} onClose={(f) => void closeDocuments([f])}>
+                  <Key size="sm" kind="quiet" round icon="add" label="Open a .mo file" onClick={openPicker} />
+                  <Segmented<Stage> label="View" size="sm" value={stageView} onChange={setStageView} options={stageOptions} />
+                </EditorTabs>
                 <div className="stage-view">
                   <div className="stage-pane" hidden={stageView !== "diagram"}>
                     <Canvas api={api} actions={actions} classes={classes} onOpen={setPopover} />

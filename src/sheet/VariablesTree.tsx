@@ -3,7 +3,7 @@
 // checkbox on becomes a Station property the runtime can set.
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { NumberField } from "@paperboatlab/ui";
+import { Icon, NumberField, RemoveKey } from "@paperboatlab/ui";
 import type { OmcClient } from "../omc/omc.ts";
 import { atom, list, parseValue } from "../omc/parse.ts";
 import type { ComponentInst, ModelVar, Param, StudioModel } from "../model/types.ts";
@@ -178,14 +178,7 @@ function VarRow({ v, param, mode, onError }: { v: ModelVar; param?: Param; mode:
           </span>
         )
       ) : param ? (
-        <button
-          type="button"
-          className="var-remove"
-          title={`Remove ${param.id}`}
-          onClick={() => void api.removeVariable(param.id).catch((e: Error) => onError(e.message))}
-        >
-          ×
-        </button>
+        <RemoveKey label={`Remove ${param.id}`} onClick={() => void api.removeVariable(param.id).catch((e: Error) => onError(e.message))} />
       ) : null}
     </div>
   );
@@ -298,7 +291,7 @@ export function VariablesTree({ model, mode }: { model: StudioModel; mode: Mode 
       </div>
       <div className="var-tree-body" role="tree" aria-label="Model variables">
         <button type="button" className="var-group" aria-expanded={!collapsed.has("model")} onClick={() => toggle("model")}>
-          <span className="caret">{collapsed.has("model") ? "▸" : "▾"}</span>
+          <Icon className="caret" name={collapsed.has("model") ? "chevron-right" : "chevron-down"} size={12} />
           model variables
           <span className="lbl">{shownVars.length}</span>
         </button>
@@ -310,7 +303,7 @@ export function VariablesTree({ model, mode }: { model: StudioModel; mode: Mode 
           ))}
 
         <button type="button" className="var-group" aria-expanded={!collapsed.has("components")} onClick={() => toggle("components")}>
-          <span className="caret">{collapsed.has("components") ? "▸" : "▾"}</span>
+          <Icon className="caret" name={collapsed.has("components") ? "chevron-right" : "chevron-down"} size={12} />
           components
           <span className="lbl">{shownComponents.length}</span>
         </button>
@@ -320,7 +313,7 @@ export function VariablesTree({ model, mode }: { model: StudioModel; mode: Mode 
             shownComponents.map((c) => (
               <div className="var-component" key={c.name}>
                 <button type="button" className="var-component-head" aria-expanded={!collapsed.has(c.name)} onClick={() => toggle(c.name)}>
-                  <span className="caret">{collapsed.has(c.name) ? "▸" : "▾"}</span>
+                  <Icon className="caret" name={collapsed.has(c.name) ? "chevron-right" : "chevron-down"} size={12} />
                   {c.name}
                   <span className="var-type">{shortName(c.class)}</span>
                 </button>

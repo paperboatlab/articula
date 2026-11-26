@@ -1,6 +1,7 @@
 // The component browser: a package tree, and the cards of the chosen package (or of a search)
 // in a column beside it: vector thumbnails, docstrings, connector summaries, drag-and-drop.
 
+import { Icon, Key, RemoveKey } from "@paperboatlab/ui";
 import { BlockIcon } from "@paperboatlab/ui/canvas";
 import { type IconDef, type IconPort } from "@paperboatlab/ui/canvas";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
@@ -204,14 +205,7 @@ export function ComponentCard({
 
       <div className="card-foot">
         <span className="lbl card-hint">{item.name}</span>
-        <button
-          type="button"
-          className="key small add-btn"
-          title={`Add ${item.name} to canvas`}
-          onClick={handleAddClick}
-        >
-          + Add
-        </button>
+        <Key size="sm" kind="quiet" icon="add" title={`Add ${item.name} to canvas`} onClick={handleAddClick}>Add</Key>
       </div>
     </div>
   );
@@ -274,7 +268,7 @@ function TreeNode({
         style={{ paddingLeft: 8 + depth * 12 }}
       >
         <button type="button" className="tree-caret" tabIndex={-1} aria-hidden="true" onClick={() => setOpen((o) => !o)}>
-          {leaf ? "" : open ? "▾" : "▸"}
+          {!leaf && <Icon name={open ? "chevron-down" : "chevron-right"} size={12} />}
         </button>
         <button type="button" className="tree-name" onClick={() => onChoose(node.full)} onDoubleClick={() => setOpen((o) => !o)}>
           {node.name}
@@ -352,9 +346,7 @@ export function Library({ omc, model, onPlace }: Props) {
       <div className="lib-tree-col">
         <div className="lib-search-bar">
           <span className="well search-well">
-            <span className="search-glyph" aria-hidden="true">
-              ⌕
-            </span>
+            <Icon name="search" size={14} />
             <input
               className="lib-filter"
               type="search"
@@ -364,11 +356,7 @@ export function Library({ omc, model, onPlace }: Props) {
               onKeyDown={(e) => e.key === "Escape" && (setQuery(""), setChosen(null))}
               aria-label="Search components"
             />
-            {query && (
-              <button type="button" className="lib-clear-btn" onClick={() => setQuery("")} aria-label="Clear search">
-                ×
-              </button>
-            )}
+            {query && <RemoveKey label="Clear search" onClick={() => setQuery("")} />}
           </span>
         </div>
         <div className="lib-tree" role="tree" aria-label="Packages">
@@ -394,9 +382,7 @@ export function Library({ omc, model, onPlace }: Props) {
               {searching ? `“${query.trim()}”${chosen ? ` in ${shortPkg(chosen)}` : ""}` : shortPkg(chosen!)}
             </span>
             <span className="lbl lib-count">{shown.length}</span>
-            <button type="button" className="lib-clear-btn" aria-label="Close components" onClick={() => (setQuery(""), setChosen(null))}>
-              ×
-            </button>
+            <RemoveKey label="Close components" onClick={() => (setQuery(""), setChosen(null))} />
           </header>
           <div className="lib-cards" role="list" aria-label="Components list">
             {shown.length > 0 ? (
@@ -405,9 +391,7 @@ export function Library({ omc, model, onPlace }: Props) {
               <div className="lib-empty">
                 <p className="empty-title">{searching ? `Nothing matches “${query.trim()}”` : "No parts here"}</p>
                 {chosen && searching && (
-                  <button type="button" className="key small" onClick={() => setChosen(null)}>
-                    Search everywhere
-                  </button>
+                  <Key size="sm" onClick={() => setChosen(null)}>Search everywhere</Key>
                 )}
               </div>
             )}

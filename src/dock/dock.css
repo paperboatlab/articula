@@ -127,29 +127,6 @@
   margin-left: auto;
 }
 
-.studio-dock-out-well {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 var(--space-2);
-  background: var(--surface-well);
-  box-shadow: var(--well-shadow);
-  border-radius: var(--radius-md);
-}
-
-.studio-dock-out-input {
-  width: 16ch;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font: 400 var(--size-xs) var(--font-mono);
-  padding: 0;
-}
-
-.studio-dock-out-input:focus {
-  outline: none;
-}
-
 .studio-dock-export-key {
   height: 28px;
   padding: 0 12px;

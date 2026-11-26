@@ -3,7 +3,7 @@
 // drawing lives on the canvas (View ▸ Icon), not here.
 
 import { useEffect, useState } from "react";
-import { Panel, Segmented } from "@paperboatlab/ui";
+import { Panel, RemoveKey, Segmented } from "@paperboatlab/ui";
 import { useStudio } from "../model/types.ts";
 import { defaultExportFolder } from "../dock/dock.ts";
 import { PaperboatBlock } from "./PaperboatBlock.tsx";
@@ -20,14 +20,6 @@ function initialTabFromUrl(): SheetTab {
     if (q === "paperboat") return "paperboat";
   }
   return "interface";
-}
-
-function RemoveGlyph() {
-  return (
-    <svg viewBox="0 0 10 10" aria-hidden="true">
-      <path d="M2 2l6 6M8 2L2 8" />
-    </svg>
-  );
 }
 
 export function InterfaceSheet({ open, onOpen, onClose, canExport }: InterfaceSheetProps) {
@@ -77,9 +69,7 @@ export function InterfaceSheet({ open, onOpen, onClose, canExport }: InterfaceSh
                             {entry.name}
                           </span>
                           {entry.unit && <span className="studio-prop-unit">{entry.unit}</span>}
-                          <button type="button" className="studio-remove" title={`Remove ${entry.name}`} onClick={() => void api.removeEntry(entry.name)}>
-                            <RemoveGlyph />
-                          </button>
+                          <RemoveKey label={`Remove ${entry.name}`} onClick={() => void api.removeEntry(entry.name)} />
                         </div>
                       ))
                     )}
@@ -96,9 +86,7 @@ export function InterfaceSheet({ open, onOpen, onClose, canExport }: InterfaceSh
                             {entry.name}
                           </span>
                           {entry.unit && <span className="studio-prop-unit">{entry.unit}</span>}
-                          <button type="button" className="studio-remove" title={`Remove ${entry.name}`} onClick={() => void api.removeEntry(entry.name)}>
-                            <RemoveGlyph />
-                          </button>
+                          <RemoveKey label={`Remove ${entry.name}`} onClick={() => void api.removeEntry(entry.name)} />
                         </div>
                       ))
                     )}

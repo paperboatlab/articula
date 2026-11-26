@@ -3,7 +3,7 @@
 // with a filter, grouped by component, each with its final value).
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Key, NumberField, Spinner, readStored, writeStored, type Toast } from "@paperboatlab/ui";
+import { Icon, Key, NumberField, Spinner, readStored, writeStored, type Toast } from "@paperboatlab/ui";
 import { Plot2D, type PlotAxes } from "@paperboatlab/ui/plot";
 import { SolverSettings } from "./SolverSettings.tsx";
 import { DEFAULTS, loadSolver, OPTIONS, saveSolver, SOLVERS, summary, type SolverChoice } from "./solver.ts";
@@ -105,7 +105,7 @@ function Variables({ run, picks, onPicks }: { run: Run | null; picks: string[]; 
           : (
             <div key={g} className="vgroup">
               <button type="button" className="vgh" aria-expanded={words.length > 0 || open.has(g)} onClick={() => setOpen((o) => { const x = new Set(o); x.has(g) ? x.delete(g) : x.add(g); return x; })}>
-                <span className="caret">{words.length > 0 || open.has(g) ? "▾" : "▸"}</span>{g}<small>{names.filter((n) => picks.includes(n)).length || ""}</small><small className="vc">{names.length}</small>
+                <Icon className="caret" name={words.length > 0 || open.has(g) ? "chevron-down" : "chevron-right"} size={12} />{g}<small>{names.filter((n) => picks.includes(n)).length || ""}</small><small className="vc">{names.length}</small>
               </button>
               {(words.length > 0 || open.has(g)) && names.map((n) => row(n, true))}
             </div>

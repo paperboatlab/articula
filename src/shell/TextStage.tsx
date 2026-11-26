@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { Key } from "@paperboatlab/ui";
 import { Editor as CodeEditor, EditorSettingsKey, type ConfigFile, type EditorSettings } from "@paperboatlab/ui/editor";
 import { modelica } from "@paperboatlab/ui/editor";
 import type { StudioModel } from "../model/types.ts";
@@ -125,13 +126,9 @@ export function TextStage({
         <span className="spacer" />
         {dirty && <span className="lbl">unsaved</span>}
         {text !== null && (
-          <button type="button" className="key small" onClick={() => void navigator.clipboard?.writeText(text)}>
-            Copy
-          </button>
+          <Key size="sm" kind="quiet" icon="copy" onClick={() => void navigator.clipboard?.writeText(text)}>Copy</Key>
         )}
-        <button type="button" className="key small ink" disabled={!dirty || busy} onClick={() => void save()}>
-          {busy ? "saving…" : "Save"}
-        </button>
+        <Key size="sm" kind="primary" busy={busy} disabled={!dirty || busy} onClick={() => void save()}>{busy ? "Saving…" : "Save"}</Key>
         <EditorSettingsKey settings={settings} onSettings={onSettings} file={configFile} />
       </header>
       <div className="code-editor">

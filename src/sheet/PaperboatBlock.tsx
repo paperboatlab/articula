@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { CompactBlock } from "@paperboatlab/ui/canvas";
-import { NumberField } from "@paperboatlab/ui";
+import { Key, NumberField } from "@paperboatlab/ui";
 import { type IconPort } from "@paperboatlab/ui/canvas";
 import { useStudio } from "../model/types.ts";
 import { buildPaperboatBlockDef, snapTo5, syncPortsWithEntries } from "./look.ts";
@@ -70,9 +70,7 @@ export function PaperboatBlock() {
       </div>
       <div className="paperboat-block-foot">
         <span className="studio-prop-unit">{saved ? "Saved pin placement" : dirty ? "Unsaved pin placement" : "Pins match the model"}</span>
-        <button type="button" className="studio-save-key" disabled={!dirty} onClick={() => void save()}>
-          Save pins
-        </button>
+        <Key size="sm" kind="primary" disabled={!dirty} onClick={() => void save()}>Save pins</Key>
       </div>
       {error && <p className="studio-var-error" role="alert">{error}</p>}
     </div>

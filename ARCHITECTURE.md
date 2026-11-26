@@ -42,12 +42,13 @@ flowchart LR
   `IconDef`, connectors and their domains) and its inverse; `generate.cpp`: the station generator
   (targets the legacy engine until Simplicial is rebuilt).
 - `server/src/main.cpp`: the `articula-server` binary: the server, and `check`, `generate`, `icon`.
-- `src/App.tsx`: the window (REBRAND: bar, card panels, the Panels key, Ctrl K, menus from the command
-  registry); `src/shell/`: the cards and dialogs (`Rail` Files/Library, `StudioConsole`, `OmcKey` the
-  runtimes key, `DocTabs`, `Opening` the kit's Splash, `menus.ts`).
+- `src/App.tsx`: the window (REBRAND: the kit's `.win > .bar`, card panels, the kit's `EditorTabs` for the
+  open models and `RuntimesKey` for omc, the Panels key, Ctrl K, menus from the command registry);
+  `src/shell/`: the cards and dialogs (`Rail` Files/Library, `StudioConsole`, `Opening` the kit's Splash,
+  `menus.ts`).
 - `src/store/`: `useStudioStore`, the `StudioApi` the views share (omc is the only source of truth: an
   edit is omc calls, then the model is read again); `src/omc/omc.ts` the `articula/0` client.
-- `src/canvas/` the diagram (the kit's canvas), `src/icon/` the icon editor, `src/library/` the
+- `src/canvas/` the diagram (the kit's canvas and its `CanvasTools`), `src/icon/` the icon editor, `src/library/` the
   library browser, `src/split/` the flat model and the generated C++, `src/simulate/` setup, plot and the
   variables browser, `src/viewport3d/` MultiBody shapes, `src/sheet/`, `src/popover/`, `src/dock/`.
 

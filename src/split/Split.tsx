@@ -7,7 +7,7 @@ import type { StudioModel } from "../model/types.ts";
 import type { Actions } from "../store/index.tsx";
 import { CodeView } from "./CodeView.tsx";
 import { type EditorSettings } from "@paperboatlab/ui/editor";
-import { Segmented } from "@paperboatlab/ui";
+import { Key, Segmented, Tabs } from "@paperboatlab/ui";
 
 export type View = "flat" | "cpp";
 const OPTIONS: { value: View; label: string }[] = [
@@ -72,14 +72,7 @@ export function Split({
           <p className="code-about" role="status">
             <b>flat model</b> · instantiateModel({model.name}) · read-only
             {flat.value !== null && (
-              <button
-                type="button"
-                className="key small"
-                style={{ marginLeft: "auto" }}
-                onClick={() => void navigator.clipboard?.writeText(flat.value ?? "")}
-              >
-                Copy
-              </button>
+              <Key size="sm" kind="quiet" icon="copy" style={{ marginLeft: "auto" }} onClick={() => void navigator.clipboard?.writeText(flat.value ?? "")}>Copy</Key>
             )}
           </p>
           <CodeView code={flat.value ?? (flat.error || "flattening…")} lang="mo" ariaLabel="Flat Modelica" settings={settings} appTheme={appTheme} />
@@ -89,15 +82,7 @@ export function Split({
           <p className="code-about" role="status">
             {cpp.error ? cpp.error : cpp.value ? <><b>{cpp.value.path}</b> · {cpp.value.reason}</> : "checking…"}
           </p>
-          {names.length > 1 && (
-            <div className="files" role="tablist" aria-label="Generated files">
-              {names.map((n) => (
-                <button key={n} role="tab" aria-selected={n === shown} className={n === shown ? "on" : undefined} onClick={() => setFile(n)}>
-                  {n}
-                </button>
-              ))}
-            </div>
-          )}
+          {names.length > 1 && shown && <Tabs label="Generated files" value={shown} onChange={setFile} tabs={names.map((n) => ({ value: n, label: n }))} />}
           <CodeView
             code={shown ? (cpp.value?.files[shown] ?? "") : cpp.value && !names.length ? (cpp.value.notices[0] ?? "") : ""}
             lang="cpp"

@@ -1,5 +1,4 @@
-/* Interface sheet & Look tab (contracts §8.3).
-   Uses semantic tokens from @paperboat/shared/tokens.css only. */
+/* The Variables sheet and the Icon view's inspector (contracts §8.3): the kit's roles and tokens only. */
 
 .studio-sheet,
 .studio-sheet * {
@@ -18,52 +17,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-}
-
-/* Choice switch (shared Switch component) */
-.studio-sheet .switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  flex-wrap: nowrap;
-}
-
-.studio-sheet .switch > .lbl {
-  font: 400 var(--size-2xs) var(--font-sans);
-  color: var(--text-muted);
-  margin-right: var(--space-1);
-  min-width: 42px;
-}
-
-.studio-sheet .switch .opt {
-  border: 0;
-  background: none;
-  padding: 2px 3px;
-  font: 400 var(--size-2xs) var(--font-mono);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.studio-sheet .switch .opt::before {
-  content: "[";
-  margin-right: 2px;
-  visibility: hidden;
-}
-
-.studio-sheet .switch .opt::after {
-  content: "]";
-  margin-left: 2px;
-  visibility: hidden;
-}
-
-.studio-sheet .switch .opt.on {
-  color: var(--text);
-  font-weight: 600;
-}
-
-.studio-sheet .switch .opt.on::before,
-.studio-sheet .switch .opt.on::after {
-  visibility: visible;
 }
 
 /* Sections */
@@ -88,22 +41,6 @@
   background: var(--line);
 }
 
-.studio-prop-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 92px 44px;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 26px;
-}
-
-.studio-prop-name {
-  font: 500 var(--size-xs) var(--font-mono);
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .studio-prop-input {
   width: 100%;
   height: 24px;
@@ -125,52 +62,6 @@
 .studio-prop-unit {
   font: 400 var(--size-2xs) var(--font-mono);
   color: var(--text-muted);
-}
-
-/* Variables (Paperboat's Variables sheet: name, value, type, public/private) */
-.studio-var-add {
-  margin-left: auto;
-  order: 2;
-}
-
-.studio-var-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.studio-var-row {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 84px 44px 56px 20px;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 26px;
-}
-
-.studio-var-name {
-  text-align: left;
-}
-
-.studio-var-grip {
-  font: 600 var(--size-xs) var(--font-mono);
-  color: var(--text-muted);
-  cursor: grab;
-  text-align: center;
-}
-
-.studio-var-vis {
-  height: 22px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--surface-well);
-  color: var(--text-muted);
-  font: 400 var(--size-2xs) var(--font-mono);
-  cursor: pointer;
-}
-
-.studio-var-vis.on {
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px var(--line);
 }
 
 .studio-var-error {
@@ -222,48 +113,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
-}
-
-.studio-remove {
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-round);
-  background: var(--surface-raised);
-  color: var(--text);
-  cursor: pointer;
-  flex: none;
-}
-
-.studio-remove:hover {
-  border-color: var(--danger);
-  color: var(--danger-text);
-}
-
-.studio-remove svg {
-  width: 8px;
-  height: 8px;
-  display: block;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-}
-
-/* Linked block preview & CompactBlock support */
-.studio-linked-preview {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  background: var(--surface-sunken);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
 }
 
 .studio-handoff-note {
@@ -357,73 +206,7 @@
   display: none;
 }
 
-/* Look tab */
-.studio-look-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.studio-look-key {
-  height: 24px;
-  padding: 0 8px;
-  font: 500 var(--size-2xs) var(--font-mono);
-  color: var(--text);
-  background: var(--surface-raised);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.studio-look-key:hover:not(:disabled) {
-  border-color: var(--line-ink);
-}
-
-.studio-look-key.on {
-  border-color: var(--line-ink);
-  font-weight: 600;
-}
-
-.studio-look-key:disabled {
-  color: var(--text-muted);
-  opacity: 0.5;
-  cursor: default;
-}
-
-.studio-look-canvas-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2);
-  background: var(--surface-sunken);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-}
-
-.studio-look-canvas {
-  width: 164px;
-  height: 164px;
-  background: var(--surface-raised);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  cursor: crosshair;
-  touch-action: none;
-  user-select: none;
-}
-
-.studio-look-grid-dot {
-  fill: var(--dots);
-}
-
-.studio-look-sel-box {
-  fill: none;
-  stroke: var(--line-ink);
-  stroke-width: 0.8;
-  stroke-dasharray: 2 2;
-  pointer-events: none;
-}
-
+/* the Icon view's inspector */
 .studio-look-choices {
   display: flex;
   flex-direction: column;
@@ -500,26 +283,6 @@
   color: var(--text-muted);
 }
 
-.studio-look-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding-top: var(--space-1);
-  border-top: 1px solid var(--line);
-}
-
-.studio-save-key {
-  height: 28px;
-  padding: 0 14px;
-  font: 600 var(--size-xs) var(--font-sans);
-  color: var(--text);
-  background: var(--surface-raised);
-  border: 1px solid var(--line-ink);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
 /* ---- Variables tree (#43): OMEdit's browser, and Paperboat's passthrough list ---------------- */
 .var-tree { display: flex; flex-direction: column; gap: 6px; }
 .var-tree-head { display: flex; align-items: center; gap: 6px; }
@@ -528,26 +291,25 @@
 .var-group { display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 3px 2px; font: 500 var(--size-2xs) var(--font-mono); color: var(--text); text-align: left; cursor: pointer; }
 .var-group .lbl { margin-left: auto; }
 .var-component { display: flex; flex-direction: column; }
-.var-component-head { display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 2px 2px 2px 18px; font: 400 11px var(--font-mono); color: var(--text-muted); text-align: left; cursor: pointer; }
-.var-row { display: flex; align-items: center; gap: 5px; min-height: 24px; padding: 1px 2px 1px 18px; font: 400 11px var(--font-mono); color: var(--text-muted); }
+.var-component-head { display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 2px 2px 2px 18px; font: 400 var(--size-3xs) var(--font-mono); color: var(--text-muted); text-align: left; cursor: pointer; }
+.var-row { display: flex; align-items: center; gap: 5px; min-height: 24px; padding: 1px 2px 1px 18px; font: 400 var(--size-3xs) var(--font-mono); color: var(--text-muted); }
 .var-row.protected { opacity: .75; }
 .component-row { padding-left: 34px; }
 .var-kind { width: 14px; flex: none; text-align: center; font-weight: 600; color: var(--text); }
 .var-kind-parameter { color: var(--accent-text); }
-.var-kind-input, .var-kind-output { color: var(--dom-signal, var(--signal)); }
+.var-kind-input, .var-kind-output { color: var(--dom-signal); }
 .var-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .var-name-input { flex: 1 1 auto; min-width: 50px; border: 0; background: transparent; padding: 1px 2px; font: inherit; color: var(--text); }
 .var-type { flex: none; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .7; }
-.var-tag { flex: none; padding: 0 3px; border: 1px solid var(--line); border-radius: 3px; font-size: 9.5px; color: var(--text-muted); }
+.var-tag { flex: none; padding: 0 3px; border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: var(--size-3xs); color: var(--text-muted); }
 .var-tag.parameter { color: var(--accent-text); border-color: var(--signal); }
 .var-tag.protected { color: var(--text-muted); }
 .var-value { flex: none; min-width: 46px; text-align: right; color: var(--text); }
-.var-value-input { width: 68px; height: 22px; padding: 0 4px; border: 0; background: var(--surface-well); box-shadow: var(--well-shadow); border-radius: 3px; font: 400 11px var(--font-mono); color: var(--text); text-align: right; }
-.var-pass { flex: none; height: 20px; padding: 0 5px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-raised); font: 500 9.5px var(--font-mono); color: var(--text-muted); cursor: pointer; }
+.var-value-input { width: 68px; height: 22px; padding: 0 4px; border: 0; background: var(--surface-well); box-shadow: var(--well-shadow); border-radius: var(--radius-sm); font: 400 var(--size-3xs) var(--font-mono); color: var(--text); text-align: right; }
+.var-pass { flex: none; height: 20px; padding: 0 5px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-raised); font: 500 var(--size-3xs) var(--font-mono); color: var(--text-muted); cursor: pointer; }
 .var-pass.on { border-color: var(--line-ink); color: var(--text); }
 .var-pass-na { flex: none; width: 60px; text-align: center; color: var(--text-muted); }
-.var-remove { flex: none; border: 0; background: none; color: var(--text-muted); cursor: pointer; font-size: var(--size-sm); }
-.var-empty { margin: 2px 0 4px 18px; font: 400 10.5px var(--font-sans); color: var(--text-muted); }
+.var-empty { margin: 2px 0 4px 18px; font: 400 var(--size-3xs) var(--font-sans); color: var(--text-muted); }
 
 /* ---- Paperboat block editor (#43): one plate, its name and pins ---------------------------- */
 .paperboat-block { display: flex; flex-direction: column; gap: 8px; padding: var(--space-2); background: var(--surface-sunken); border: 1px solid var(--line); border-radius: var(--radius-md); }
@@ -555,7 +317,7 @@
 .paperboat-block-preview .plate-cap { display: none; }
 .paperboat-block-preview .compact-block { min-width: 120px; }
 .paperboat-block-ports { display: flex; flex-direction: column; gap: 2px; }
-.paperboat-block-port { display: flex; align-items: center; gap: 6px; min-height: 24px; min-width: 0; font: 400 11px var(--font-mono); color: var(--text); }
+.paperboat-block-port { display: flex; align-items: center; gap: 6px; min-height: 24px; min-width: 0; font: 400 var(--size-3xs) var(--font-mono); color: var(--text); }
 .paperboat-block-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .paperboat-block-foot { display: flex; align-items: center; gap: 8px; }
 .paperboat-block-foot .studio-prop-unit { margin-right: auto; }

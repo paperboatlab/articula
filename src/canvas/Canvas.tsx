@@ -19,8 +19,7 @@ import {
   MiniMap,
 } from "@xyflow/react";
 import { flipPlacement, netWireType, orthoPoints, rotatePlacement, roundedPolyline, squareUp, useCanvasHotkeys, type BlockDef, type Connectors, type IconDef, type Point as WirePoint } from "@paperboatlab/ui/canvas";
-import { CanvasHelp } from "./CanvasHelp.tsx";
-import { CompactBlock, SNAP, useWireBends, WireDragContext, type WireDrag } from "@paperboatlab/ui/canvas";
+import { CanvasTools, CompactBlock, SNAP, useWireBends, WireDragContext, type WireDrag } from "@paperboatlab/ui/canvas";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { DRAG_TYPE } from "../library/Library.tsx";
 import type { ComponentInst, Connection, StudioApi } from "../model/types.ts";
@@ -302,8 +301,8 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
             maskStrokeColor="var(--line-ink)"
             maskStrokeWidth={1}
           />
+          <CanvasTools />
         </ReactFlow>
-        <CanvasHelp />
       </WireDragContext.Provider>
       </SetBends.Provider>
       {actions.notice.failed && (

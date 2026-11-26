@@ -53,8 +53,10 @@ flowchart LR
   `WindowKeys` last), and the one file workflow from `@paperboatlab/ui/workspace` and `/hub`: `Start` in the
   bay without a workspace, the File menu from `fileMenu`, the `WorkspaceWell` after the menu bar, `AskOpen`
   outside a hub, our `OpenFile`/`SaveFile` over the hub inside one, the system's dialogs through `shell()` in
-  a Paperboat window (a typed path, a download in a browser), `Unsaved`, `ConnectHub`; the theme is
-  `settings.json`'s;
+  a Paperboat window (a typed path, a download in a browser), `Unsaved`, `ConnectHub`; the kit's `Settings` window
+  (File › Settings… Ctrl ,; Help › Keyboard shortcuts Ctrl / opens it on Shortcuts): General (the theme,
+  `settings.json`'s), Articula (omc, libraries, solver, export), Editor (`EditorSettingsPane`, `articula.toml`),
+  Hub (in a hub), Shortcuts (`ShortcutList` over the command registry);
   `src/shell/`: the cards and dialogs (`Rail` Files/Library, `StudioConsole`, `Opening` the kit's Splash,
   `menus.ts`).
 - `src/store/`: `useStudioStore`, the `StudioApi` the views share (omc is the only source of truth: an

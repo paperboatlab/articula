@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { Key } from "@paperboatlab/ui";
-import { Editor as CodeEditor, EditorSettingsKey, type ConfigFile, type EditorSettings } from "@paperboatlab/ui/editor";
+import { Editor as CodeEditor, type EditorSettings } from "@paperboatlab/ui/editor";
 import { modelica } from "@paperboatlab/ui/editor";
 import type { StudioModel } from "../model/types.ts";
 import type { Actions } from "../store/index.tsx";
@@ -21,8 +21,6 @@ export function TextStage({
   line,
   theme,
   settings,
-  onSettings,
-  configFile,
   base,
   onEditor,
 }: {
@@ -31,10 +29,8 @@ export function TextStage({
   line?: number;
   /** The app's shown theme, for the editor's "ui" setting. */
   theme: "light" | "dark";
-  /** The editor settings (the App keeps them in squero.toml) and the file they live in. */
+  /** The editor settings (Settings › Editor; the App keeps them in articula.toml). */
   settings: EditorSettings;
-  onSettings: (next: EditorSettings) => void;
-  configFile?: ConfigFile;
   /** HEAD's copy of the file for the git gutter; null when untracked or outside a repository. */
   base?: string | null;
   onEditor?: (handle: TextEditorHandle | null) => void;
@@ -129,7 +125,6 @@ export function TextStage({
           <Key size="sm" kind="quiet" icon="copy" onClick={() => void navigator.clipboard?.writeText(text)}>Copy</Key>
         )}
         <Key size="sm" kind="primary" busy={busy} disabled={!dirty || busy} onClick={() => void save()}>{busy ? "Saving…" : "Save"}</Key>
-        <EditorSettingsKey settings={settings} onSettings={onSettings} file={configFile} />
       </header>
       <div className="code-editor">
         {text === null ? (

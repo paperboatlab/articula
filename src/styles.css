@@ -11,7 +11,7 @@ body { background: var(--surface-ground); color: var(--text); font: var(--size-s
 /* the frame (kit .frame, REBRAND "Frame"): the bar, Files and Simulate are one surface; the stage and the console sit in the bay */
 .win.frame { gap: 0; padding: 0 0 var(--gutter); }
 .frame .ws { gap: 0; }
-/* a menu grows to its longest line (Open folder… Ctrl K Ctrl O) instead of wrapping it */
+/* a menu grows to its longest line (Open folder… Ctrl Shift O) instead of wrapping it */
 .menubar .menu-item { white-space: nowrap; }
 /* our picker's preview of a hub file: when it changed, its size */
 .open-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 0; font: var(--size-2xs) var(--font-mono); }

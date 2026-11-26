@@ -4,10 +4,12 @@ The workbench
 The window
 ----------
 
-The bar holds the menus, the open model, **Check**, **Simulate**, the runtimes key (omc's state), the
-Panels key and the theme. Below it, three cards: **Files** and **Library** at the left (:kbd:`Ctrl B`),
+The bar holds the menus, the workspace (a folder or a hub, its menu under the chevron), **Check**,
+**Simulate**, the runtimes key (omc's state), the Panels key and the theme; in a Paperboat window the
+window's own keys end it. Below it, three cards: **Files** and **Library** at the left (:kbd:`Ctrl B`),
 the model in the middle with the **Console** under it (:kbd:`Ctrl J`), the source and **Simulate** at
-the right (:kbd:`Ctrl Alt B`). Each card hides to a slim bar.
+the right (:kbd:`Ctrl Alt B`). Each card hides to a slim bar. The tab above the model names its file.
+Without a workspace the **Start** page takes the middle.
 
 Files and Library
 -----------------
@@ -19,16 +21,31 @@ at all, and a class inside a package is opened with its package loaded first.
 Open and save
 -------------
 
-File › Open… (:kbd:`Ctrl O`) asks where from: **This computer** (your system's file picker) or one of
-your hubs, Malachite's folders for a piece of work, each with how many models it holds. A hub shows its
-tree, only the ``.mo`` files and the folders holding them (**All files** shows the rest). The file
-decides the hub: a model opened from a hub puts its hub's selector in the bar, with the file's path in
-the hub after it. A model outside the open workspace opens in a new Articula window, since omc sees only
-the workspace. File › Save As… (:kbd:`Ctrl Shift S`) is the same picker choosing a folder and a name;
-it writes a copy and keeps editing the open file. Without Malachite there are no hubs, and Open goes
-straight to the system's picker.
+The File menu is the same in every Paperboat app: New model · Open file… (:kbd:`Ctrl O`) · Open folder…
+(:kbd:`Ctrl K Ctrl O`) · Open recent · Connect to a hub… · Save (:kbd:`Ctrl S`) · Save as…
+(:kbd:`Ctrl Shift S`) · Close file (:kbd:`Ctrl W`) · Close folder · Settings… (:kbd:`Ctrl ,`).
 
-File › New class… opens the New Class sheet: name, kind, package, an optional
+**The hub decides the picker.** Outside a hub, Open file… asks: a local file (your system's file
+dialog) or Connect to a hub…; without Malachite it goes straight to the local file. Inside a hub, Open
+and Save as are Articula's own picker over the hub: only the ``.mo`` files and the folders holding them
+(**All files** shows the rest), with when each changed and its size. A model from outside the workspace
+switches the workspace to its folder, or to its hub; the models of the old one close. Save as writes
+the model to the new file and goes on with it there.
+
+The workspace menu (the folder or hub in the bar) opens another folder, connects to a hub, shows the
+folder in your file manager, and closes it (back to Start). In a hub it switches hubs, makes a **New
+hub…**, opens the hub in Malachite, or leaves it: **Use a local folder instead…** or **Close hub**.
+Closing a model, a folder or a hub with unsaved changes asks first: Save, Don't save, or Cancel.
+Inside a hub no Git shows; Malachite keeps the history.
+
+Open recent, and the Start page, list the folders and hubs every Paperboat app opened and the models
+Articula opened, newest first (``recent.json`` in Paperboat's folder, ``~/.local/share/paperboat``).
+
+In a browser the page gets no real paths: Open folder… and the local file take a typed path, Save as…
+downloads the model, and a ``.mo`` dropped on the Start page is copied into Articula's own folder. In a
+Paperboat window (``paperboat app open articula``) they are your system's dialogs.
+
+Model › New class… (:kbd:`Ctrl Shift N`) opens the New Class sheet: name, kind, package, an optional
 base class and a live skeleton. It writes the ``.mo`` and appends ``package.order`` when the class
 lands in a package.
 

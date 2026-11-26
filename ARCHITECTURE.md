@@ -5,7 +5,8 @@ the map.
 
 ## 1. Overview
 
-Articula is an app server (C++20) and a page. The server owns the workspace and speaks two protocols
+Articula is an app server (C++20) and a page. The server owns the workspace (a folder, a hub, or none: the
+Start page; switched at runtime, plans/2026-11-26_11-05_one_file_workflow.md) and speaks two protocols
 of the platform: `paperboat-control/0` to `paperboatd` for omc's session lease, and
 `paperboat-runtime/0` to the `omc` runtime the lease starts (`eval` = one omc expression; the
 runtime's `serve.pl` bridges it to omc's own ZeroMQ server inside the container, which keeps
@@ -22,6 +23,7 @@ flowchart LR
   O -- paperboat-runtime/0 --> K[(omc session)]
   D --> K
   H --- W[(the workspace)]
+  H --- R[("$PAPERBOAT_HOME: recent.json, settings.json")]
 ```
 
 ## 2. Codemap
@@ -34,17 +36,25 @@ flowchart LR
   back in every answer; natively the map is empty. `script()` runs a `.mos` in a short exec lease (with
   the network for library downloads). Also the allow-list (`allowed`) and omc's value parser.
 - `server/src/server.cpp`, `include/articula/server.hpp`: the HTTP/WebSocket server (ixwebsocket) and
-  every `articula/0` op (open, workspace, class files, save, check, icon, set_icon, simulate, cancel,
-  packages, generate/export, and the hubs: `hubs` from `paperboat hub list --json`, `hub_files`, `hub_new`,
-  `open_window` for a model outside the workspace, through `paperboat app open`); `workspace_of` picks the lease's project (a folder, or the folder holding
-  a file's top package).
+  every `articula/0` op (open, class files, save, check, icon, set_icon, simulate, cancel, packages,
+  generate/export, the hubs: `hubs` from `paperboat hub list --json`, `hub_files`, `hub_new`,
+  `hub_open_malachite`), and the one file workflow: the workspace (`workspace`, `open_folder`, `connect`,
+  `close_workspace`, `tree`; `Omc::set_project` moves the lease with it, and an `open` from outside switches
+  to the file's hub or folder first) and the shared store (`recent`, `recent_forget`, `settings`,
+  `settings_write`: `$PAPERBOAT_HOME/recent.json` and `settings.json`, each written whole to a temp file and
+  renamed); `workspace_of` is a folder, or the folder holding a file's top package.
 - `server/src/icon.cpp`, `connectors.cpp`, `seticon.cpp`: the importer (`Icon(graphics)` → the kit's
   `IconDef`, connectors and their domains; and `icon_art`, the same graphics kept whole, which the `icon`
   op returns as `art`) and its inverse; `generate.cpp`: the station generator
   (targets the legacy engine until Simplicial is rebuilt).
 - `server/src/main.cpp`: the `articula-server` binary: the server, and `check`, `generate`, `icon`.
 - `src/App.tsx`: the window (REBRAND: the kit's `.win > .bar`, the frame (the bar, Files/Library and Simulate one surface, the stage and the console in the kit's `.bay`), the kit's `EditorTabs` for the
-  open models and `RuntimesKey` for omc, the Panels key, Ctrl K, menus from the command registry);
+  open models and `RuntimesKey` for omc, the Panels key, Ctrl K, menus from the command registry, the
+  `WindowKeys` last), and the one file workflow from `@paperboatlab/ui/workspace` and `/hub`: `Start` in the
+  bay without a workspace, the File menu from `fileMenu`, the `WorkspaceWell` after the menu bar, `AskOpen`
+  outside a hub, our `OpenFile`/`SaveFile` over the hub inside one, the system's dialogs through `shell()` in
+  a Paperboat window (a typed path, a download in a browser), `Unsaved`, `ConnectHub`; the theme is
+  `settings.json`'s;
   `src/shell/`: the cards and dialogs (`Rail` Files/Library, `StudioConsole`, `Opening` the kit's Splash,
   `menus.ts`).
 - `src/store/`: `useStudioStore`, the `StudioApi` the views share (omc is the only source of truth: an
@@ -62,4 +72,9 @@ flowchart LR
 - The page never talks to omc or the daemon itself.
 - A library icon is drawn from its own annotation (`art`), restyled by rule, never redrawn by hand; the
   token `IconDef` sizes the plate, places the ports, and is what the icon editor edits.
-- Hubs are Malachite's: Articula reads them only through `paperboat hub list --json`; no Malachite, no hubs.
+- Hubs are Malachite's: Articula reads them only through `paperboat hub list --json`; no Malachite, no hubs
+  (the `hubs` op is null, and no hub word shows). Inside a hub no Git shows.
+- One workspace per server, which omc's lease follows: a file opens in this window, switching the
+  workspace to its folder or hub when it lies outside (never a second window); closing goes back to Start.
+- The shared store is every app's: Articula writes only its own entries into `recent.json` (newest first,
+  one per kind and path, 40 at most) and only `theme` in `settings.json`, keeping the keys it doesn't know.

@@ -43,7 +43,7 @@ flowchart LR
   op returns as `art`) and its inverse; `generate.cpp`: the station generator
   (targets the legacy engine until Simplicial is rebuilt).
 - `server/src/main.cpp`: the `articula-server` binary: the server, and `check`, `generate`, `icon`.
-- `src/App.tsx`: the window (REBRAND: the kit's `.win > .bar`, card panels, the kit's `EditorTabs` for the
+- `src/App.tsx`: the window (REBRAND: the kit's `.win > .bar`, the frame (the bar, Files/Library and Simulate one surface, the stage and the console in the kit's `.bay`), the kit's `EditorTabs` for the
   open models and `RuntimesKey` for omc, the Panels key, Ctrl K, menus from the command registry);
   `src/shell/`: the cards and dialogs (`Rail` Files/Library, `StudioConsole`, `Opening` the kit's Splash,
   `menus.ts`).

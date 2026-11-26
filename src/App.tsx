@@ -823,9 +823,9 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               state: running ? "busy" : status.state === "checking" ? "starting" : status.state === "failed" ? "failed" : "idle",
               now: running ? "simulating" : "working", note: status.state === "failed" ? "the next call starts a new session" : undefined,
             }]} footer={(close) => <><span>Libraries live with this workspace.</span><Key size="sm" kind="quiet" icon="package" onClick={() => { close(); setPackagesOpen(true); }}>Libraries…</Key></>} />
+            <Notifications {...notes} />
             <PanelsKey panels={PANELS.map((p) => ({ id: p.side, label: p.name, keys: p.keys, shown: !hidden[p.side] }))} layout={LAYOUT} onToggle={(id) => toggle(id as Side)} />
             <span className="lsep" />
-            <Notifications {...notes} />
             <ThemePicker theme={theme} onChange={setTheme} />
           </span>
         </header>

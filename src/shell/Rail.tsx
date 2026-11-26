@@ -66,7 +66,7 @@ export function Rail({
 
   return (
     <Panel name={workspaceName(workspace)} side="left" icon={tab === "files" ? "folder" : "a-library"} width={272}
-      hidden={collapsed} onHidden={(h) => onToggle?.(h)} className={`rail rail-${tab}`}
+      hidden={collapsed} onHidden={(h) => onToggle?.(h)} className="side-files"
       count={tab === "files" ? `${classes} ${classes === 1 ? "class" : "classes"}` : undefined}
       head={<Tabs label="Files and library" value={tab} onChange={onTab} tabs={[{ value: "files", label: "Files" }, { value: "library", label: "Library" }]} />}>
       <div className="rail-body" hidden={tab !== "files"} title={workspace?.root}>

@@ -264,7 +264,7 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
           onConnect={(c) => {
             const a = pathFor(c.source, c.sourceHandle);
             const b = pathFor(c.target, c.targetHandle);
-            void api.connect(a, b).then((why) => actions.say(why ?? ""));
+            void api.connect(a, b).then((why) => actions.say(why ?? "", !!why));
           }}
           onNodeClick={(e, n) => {
             // the store is the one source of what is selected; a click says what changes
@@ -306,9 +306,9 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
         <CanvasHelp />
       </WireDragContext.Provider>
       </SetBends.Provider>
-      {actions.notice && (
-        <p className="notice" role="status">
-          {actions.notice}
+      {actions.notice.failed && (
+        <p className="notice" role="alert">
+          {actions.notice.text}
         </p>
       )}
       {quick && <QuickAdd names={classes} wire={selectedWire} plan={plan} onPlace={(cls) => place(cls)} onClose={() => (setQuick(false), root.current?.focus())} />}

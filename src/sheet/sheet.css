@@ -6,66 +6,14 @@
   box-sizing: border-box;
 }
 
-.studio-sheet {
-  grid-area: sheet;
-  width: 396px;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface-panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  color: var(--text);
-  font: 400 var(--size-xs) var(--font-sans);
-  overflow: hidden;
-  transition: width var(--slide);
-}
-
-/* Folded to a thin standing tab; the head and body come back when it opens. */
-.studio-sheet:not(.open) { width: 34px; }
-.studio-sheet > [hidden] { display: none; }
-.studio-sheet > :not(.studio-sheet-tab) { min-width: 394px; }
-
-.studio-sheet-tab {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) 0;
-  border: 0;
-  background: none;
-  color: var(--text-muted);
-  font: 500 var(--size-xs) var(--font-sans);
-  cursor: pointer;
-}
-.studio-sheet-tab:hover { color: var(--text); background: var(--surface-sunken); }
-.studio-sheet-tab svg, .studio-sheet-fold svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; display: block; }
-.studio-sheet-tab-name { writing-mode: vertical-rl; transform: rotate(180deg); }
-.studio-sheet-glyph { font: 600 var(--size-sm) var(--font-mono); color: var(--text); }
-.studio-sheet-fold { width: 24px; height: 24px; padding: 0; display: inline-grid; place-items: center; }
-
-.studio-sheet-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  height: var(--panel-head-height);
-  padding: 0 var(--space-3);
-  border-bottom: 1px solid var(--line);
-  flex: none;
-}
-
-.studio-sheet-title {
-  font: 600 var(--size-sm) var(--font-sans);
-  color: var(--text);
-  margin: 0;
-}
+/* The kit's side Panel (hidden: its slim bar, in a 38 px slot at the window's right edge). Open, it
+   floats over the Simulate card from that edge, so the stage keeps its width. */
+.sheet-slot { position: relative; flex: none; width: 38px; }
+.sheet-slot > .panel.side { position: absolute; top: 0; right: 0; bottom: 0; z-index: 20; }
+.sheet-slot > .panel.side:not(.hidden) { box-shadow: var(--shadow-2); }
+.studio-sheet { font: 400 var(--size-xs) var(--font-sans); }
 
 .studio-sheet-body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
   padding: var(--space-2) var(--space-3);
   display: flex;
   flex-direction: column;

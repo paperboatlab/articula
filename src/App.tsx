@@ -337,7 +337,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   };
 
   useEffect(() => {
-    if (actions.notice) say(actions.notice);
+    if (actions.notice.text) say(actions.notice.text, actions.notice.failed ? "error" : "info");
   }, [actions.notice]);
 
   const saveCurrent = async () => {

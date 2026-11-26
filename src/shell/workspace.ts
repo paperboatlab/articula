@@ -14,14 +14,14 @@ export type WorkspaceEntry = {
   depth: number;
 };
 
+/** The server's `tree`: the workspace's classes and packages (the folder or hub itself is the kit's Workspace). */
 export type Workspace = {
   root: string;
-  /** The .mo the workspace was read for. */
-  file: string;
-  /** True when the file sits in a Modelica package (a folder with package.mo). */
-  package: boolean;
   entries: WorkspaceEntry[];
 };
+
+/** Whether `path` is `root` or lies under it. */
+export const inside = (path: string, root: string) => path === root || path.startsWith(`${root.replace(/[\\/]+$/, "")}/`);
 
 /** The server's `git` op: HEAD's copy of each tracked .mo, and the ones new or changed; null outside a repository. */
 export type GitState = { head: Record<string, string>; untracked: string[]; modified: string[] };

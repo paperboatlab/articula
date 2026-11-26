@@ -62,11 +62,15 @@ export type Actions = {
   dirty: boolean;
   save(file?: string): Promise<void>;
   saveAs(file: string): Promise<void>;
-  /** A fresh model; `file` places it in the current workspace instead of the server's cwd. */
+  /** A fresh model; a bare name lands in the workspace (none: Articula's own folder). */
   newModel(name: string, file?: string): Promise<void>;
   openFile(file: string, content?: string): Promise<void>;
   /** Show a model already read this session, without another omc round trip. */
   restore(shown: StudioModel): void;
+  /** No model shown (the last file closed, the workspace closed); what wasn't saved is dropped. */
+  close(): void;
+  /** The first open answered: the server's model, or none (the Start page, an empty folder). */
+  ready: boolean;
   /** Writes a new class file (and package.order); opening it is the caller's next step. */
   createClass(spec: { file: string; name: string; kind: string; within: string; base?: string }): Promise<{ file: string; model: string }>;
   newPackage(parent: string, name: string, within: string): Promise<{ path: string; name: string }>;
@@ -94,6 +98,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
   const [notice, setNotice] = useState<Notice>(QUIET);
   const [error, setError] = useState("");
   const [stage, setStage] = useState("loading the Modelica library and opening the model");
+  const [ready, setReady] = useState(false);
   const looks = useRef<IconCache>(new Map());
   const current = useRef<StudioModel | null>(null);
   current.current = model;
@@ -143,17 +148,19 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
     [enqueue, run, refresh],
   );
 
-  // Open the server's model once the connection is up.
+  // Open the server's model once the connection is up; none: the Start page or the folder alone.
   useEffect(() => {
     let live = true;
-    omc.op<{ file: string; model: string }>("open").then(
+    omc.op<{ file: string | null; model: string | null }>("open").then(
       async (opened) => {
-        setStage(`reading ${opened.model}: its parts, icons and wires`);
-        const m = await readModel(omc, opened.model, opened.file, looks.current);
-        if (live) {
+        if (opened.file && opened.model) {
+          setStage(`reading ${opened.model}: its parts, icons and wires`);
+          const m = await readModel(omc, opened.model, opened.file, looks.current);
+          if (!live) return;
           setModel(m);
           setDirty(false);
         }
+        if (live) setReady(true);
       },
       (e: Error) => live && setError(e.message),
     );
@@ -372,6 +379,12 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         setSelection([]);
         say(`Opened ${shown.name}`);
       },
+      close() {
+        setModel(null);
+        setDirty(false);
+        setSelection([]);
+      },
+      ready,
       async newModel(name: string, file?: string) {
         const raw = name.trim();
         if (!raw) return;
@@ -454,7 +467,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         });
       },
     }),
-    [notice, say, edit, omc, undo, redo, canUndo, canRedo, dirty, enqueue, refresh],
+    [notice, say, edit, omc, undo, redo, canUndo, canRedo, dirty, ready, enqueue, refresh],
   );
 
   return { api, actions, error, stage };

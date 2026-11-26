@@ -191,8 +191,8 @@ test("dock: exportStation streams progress sequence and formats result or error"
   assert.equal(failed.line, "DAE has structural singularity");
 
   // Start: building until the port opens; a station that exits is an error carrying its log
-  api.setExportScript([], { name: "ssom_RLCircuit", port: 4100, state: "building" });
-  assert.match((await runStationExport(api, "serve", () => {})).line, /^building ssom_RLCircuit for port 4100/);
+  api.setExportScript([], { name: "RLCircuit", port: 4100, state: "building" });
+  assert.match((await runStationExport(api, "serve", () => {})).line, /^building RLCircuit for port 4100/);
   api.setExportScript([], { port: 4100, state: "running" });
   assert.match((await runStationExport(api, "status", () => {}, 4100)).line, /running on port 4100/);
   api.setExportScript([], { port: 4100, state: "exited", log: "cmake build failed\n" });

@@ -845,33 +845,11 @@ std::string base64(const std::string& in) {
   return out;
 }
 
-// The paperboat CLI: $PAPERBOAT_BIN or the one on PATH.
+// The paperboat CLI: $PAPERBOAT_BIN or the one on PATH. It runs the installed apps' commands too:
+// `pack` and `run` are Simplicial's (paperboat app install simplicial).
 std::string paperboat_bin() {
   const char* e = std::getenv("PAPERBOAT_BIN");
-  if (e && *e) return e;
-#ifdef _WIN32
-  // the sibling checkout's build: <repo>/paperboat/engine/build/tools/<config>/paperboat.exe
-  // (bin/paperboat is a bash script, which CreateProcess cannot run)
-  const fs::path exe = win32::exe_path();
-  for (fs::path d = exe.parent_path(); d.has_parent_path() && d != d.root_path(); d = d.parent_path()) {
-    for (const char* config : {"Release", "RelWithDebInfo", "Debug", "."}) {
-      const fs::path c = d.parent_path() / "paperboat" / "engine" / "build" / "tools" / config / "paperboat.exe";
-      std::error_code missing;
-      if (fs::is_regular_file(c, missing)) return fs::weakly_canonical(c, missing).string();
-    }
-  }
-  return "paperboat";
-#else
-  // the sibling checkout: <repo>/squero-studio-om/server/build/squero-om -> <repo>/paperboat/bin/paperboat
-  std::error_code ec;
-  const fs::path exe = fs::read_symlink("/proc/self/exe", ec);
-  for (fs::path d = exe.parent_path(); !ec && d.has_parent_path() && d != d.root_path(); d = d.parent_path()) {
-    const fs::path c = d.parent_path() / "paperboat" / "bin" / "paperboat";
-    std::error_code missing;  // not `ec`: a missing candidate sets it, which would end the walk
-    if (fs::is_regular_file(c, missing)) return c.string();
-  }
-  return "paperboat";
-#endif
+  return e && *e ? e : "paperboat";
 }
 
 // What `paperboat <args>` prints on stdout, or "" when it can't be run. `args` are plain words.
@@ -1032,85 +1010,6 @@ int run_paperboat_streaming(const std::vector<std::string>& args, const fs::path
   return run_process_streaming(paperboat_bin(), args, log, on_line);
 }
 
-// The prebuilt SDK for the checkout the paperboat binary came from, installing it once if it is
-// missing or older than the engine library. Without it every station rebuilds the engine and all
-// its dependencies in its own build folder (minutes, and gigabytes).
-void ensure_engine_sdk(const Session& session) {
-  if (const char* given = std::getenv("PAPERBOAT_SDK_DIR"); given && *given) return;
-  std::error_code ec;
-  const fs::path bin = fs::canonical(paperboat_bin(), ec);
-  if (ec || !fs::is_regular_file(bin)) return;
-#ifdef _WIN32
-  // <repo>/paperboat/engine/build/tools/Release/paperboat.exe -> <repo>/paperboat/engine/build
-  fs::path engine;
-  for (fs::path d = bin.parent_path(); d.has_parent_path() && d != d.root_path(); d = d.parent_path())
-    if (d.filename() == "engine" && fs::is_regular_file(d / "CMakeLists.txt", ec)) {
-      engine = d;
-      break;
-    }
-  if (engine.empty()) return;
-  const fs::path build = engine / "build";
-  fs::path core;
-  for (const char* config : {"Release", "RelWithDebInfo", "Debug"})
-    if (fs::is_regular_file(build / "core" / config / "paperboat_core.lib", ec)) {
-      core = build / "core" / config / "paperboat_core.lib";
-      break;
-    }
-  if (core.empty()) return;
-  const std::string config_name = core.parent_path().filename().string();
-#else
-  // <repo>/paperboat/bin/paperboat -> <repo>/paperboat/engine/build/dev
-  const fs::path engine = bin.parent_path().parent_path() / "engine";
-  fs::path build;
-  for (const fs::path candidate : {engine / "build" / "dev", engine / "build"}) {
-    if (fs::is_regular_file(candidate / "core" / "libpaperboat_core.a", ec) ||
-        fs::is_regular_file(candidate / "libpaperboat_core.a", ec)) {
-      build = candidate;
-      break;
-    }
-  }
-  if (build.empty()) return;
-#endif
-  const fs::path sdk = engine / "build" / "sdk";
-  fs::path config;
-  const auto find_config = [&] {
-    for (const fs::path lib : {sdk / "lib64" / "cmake" / "Paperboat", sdk / "lib" / "cmake" / "Paperboat"})
-      if (fs::is_regular_file(lib / "PaperboatConfig.cmake", ec)) return lib;
-    return fs::path{};
-  };
-  config = find_config();
-#ifndef _WIN32
-  const fs::path core = fs::is_regular_file(build / "core" / "libpaperboat_core.a", ec) ? build / "core" / "libpaperboat_core.a"
-                                                                                        : build / "libpaperboat_core.a";
-#endif
-  if (config.empty() || fs::last_write_time(config / "PaperboatConfig.cmake", ec) < fs::last_write_time(core, ec)) {
-    const auto say = [&](const std::string& line) {
-      if (session.push && !line.empty()) session.push(json{{"op", "log"}, {"level", "info"}, {"text", line}}.dump());
-    };
-    say(config.empty() ? "installing the engine SDK once (every station build reuses it)…" : "refreshing the engine SDK…");
-    const fs::path log = fs::temp_directory_path() / "ssom_sdk.log";
-#ifdef _WIN32
-    // a multi-config build: install the configuration the library was built in
-    const int code = run_process_streaming(
-        "cmake", {"--install", build.string(), "--config", config_name, "--prefix", sdk.string(), "--component", "dev"}, log, say);
-#else
-    const int code = run_process_streaming(
-        "cmake", {"--install", build.string(), "--prefix", sdk.string(), "--component", "dev"}, log, say);
-#endif
-    if (code != 0) {
-      say("engine SDK install failed; the station will build the engine from source (slow)");
-      return;
-    }
-    config = find_config();
-    if (config.empty()) return;
-  }
-#ifdef _WIN32
-  win32::set_env("PAPERBOAT_SDK_DIR", config.string());
-#else
-  setenv("PAPERBOAT_SDK_DIR", config.c_str(), 1);
-#endif
-}
-
 // The last lines of a log, for an error the user can act on.
 std::string log_tail(const fs::path& log, std::size_t lines = 12) {
   std::ifstream f(log);
@@ -1199,12 +1098,8 @@ json serve_status(int port, std::size_t offset) {
   return out;
 }
 
-// "stop": `paperboat stop <port>` once it listens, then the rest of its session (a build in flight).
+// "stop": end the session it was started in (Simplicial's `run` and the station under it).
 json serve_stop(int port) {
-  const fs::path log = fs::temp_directory_path() / "ssom_stop.log";
-  if (listening(port))
-    if (const int code = run_paperboat({"stop", std::to_string(port)}, log); code != 0)
-      throw paperboat_failed("stop " + std::to_string(port), code, log);
   std::lock_guard lock(served_mutex);
   if (const auto it = served.find(port); it != served.end()) {
 #ifdef _WIN32
@@ -1219,7 +1114,7 @@ json serve_stop(int port) {
   return json{{"port", port}, {"state", "stopped"}};
 }
 
-// Export without a folder of the user's, into <tmp>/ssom_<model>: mode "pst" packs it and returns
+// Export without a folder of the user's, into <tmp>/articula_<model>: mode "pst" packs it and returns
 // the archive (base64); "serve" starts it on the given port if free, else a free one and returns at once (poll "status": the
 // first start builds the engine, minutes); "stop" ends one.
 json op_export(Omc& omc, const json& in, const Session& session) {
@@ -1234,8 +1129,7 @@ json op_export(Omc& omc, const json& in, const Session& session) {
   std::string stem = model;
   stem = stem.substr(stem.rfind('.') == std::string::npos ? 0 : stem.rfind('.') + 1);
   for (auto& c : stem) if (!std::isalnum(static_cast<unsigned char>(c))) c = '_';
-  const fs::path dir = fs::temp_directory_path() / ("ssom_" + stem);
-  if (mode == "serve") ensure_engine_sdk(session);
+  const fs::path dir = fs::temp_directory_path() / ("articula_" + stem);
   json g = in;
   g["out"] = dir.string();
   g["dry"] = false;
@@ -1267,18 +1161,18 @@ json op_export(Omc& omc, const json& in, const Session& session) {
     });
     if (code != 0) throw paperboat_failed("pack", code, log);
     std::ifstream f(pst, std::ios::binary);
-    out["file"] = "ssom_" + stem + ".pst";
+    out["file"] = stem + ".pst";
     out["pst"] = base64(std::string(std::istreambuf_iterator<char>(f), {}));
   } else {
     // a restart asks for the port it just left, so a paperboat tab on it reconnects
     const int want = in.value("port", 0);
     const int port = want > 0 && !listening(want) ? want : free_port();
-    const pid_t pid = spawn_paperboat({"start", dir.string(), "--port", std::to_string(port), "--verbose", "--time"}, log);
+    const pid_t pid = spawn_paperboat({"run", dir.string(), "--port", std::to_string(port), "--verbose", "--time"}, log);
     {
       std::lock_guard lock(served_mutex);
       served[port] = {pid, log};
     }
-    out["name"] = "ssom_" + stem;
+    out["name"] = stem;
     out["state"] = "building";
     out["port"] = port;
     out["log"] = log.string();

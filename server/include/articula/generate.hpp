@@ -1,6 +1,6 @@
 #pragma once
 
-// A Modelica model as a Paperboat station (#160 contracts §6): `paperboat modelica generate`
+// A Modelica model as a Paperboat station (#160 contracts §6): `articula generate`
 // and Studio's "Export station" both call generate().
 //
 //   <model>-cpp/

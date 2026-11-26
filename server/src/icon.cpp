@@ -363,6 +363,107 @@ const OmValue* extract_graphics_list(const OmValue& icon_anno) {
   return nullptr;
 }
 
+// One graphic record kept whole for `icon_art`: Modelica coordinates, RGB, enum names without
+// their type ("FillPattern.Solid" -> "Solid"). A `visible` that is an expression is kept as text.
+std::optional<nlohmann::json> art_graphic(const OmValue& raw_item) {
+  bool had_dyn = false;
+  const OmValue item = strip_dynamic_select(raw_item, had_dyn);
+  auto call = parse_call(item.atom);
+  if (!call) return std::nullopt;
+  const std::string& kind = call->first;
+  if (kind != "Line" && kind != "Polygon" && kind != "Rectangle" && kind != "Ellipse" && kind != "Text") return std::nullopt;
+  const OmValue& args = call->second;
+  const auto named = named_args(args);
+  const auto at = [&](std::string_view key, std::size_t pos) { return arg_at(args, named, key, pos); };
+  const auto en = [](const OmValue* v, std::string fallback) {
+    if (!v) return fallback;
+    const std::string t = trim(v->atom);
+    const auto dot = t.rfind('.');
+    return dot == std::string::npos ? t : t.substr(dot + 1);
+  };
+  const auto num = [&](std::string_view key, std::size_t pos, double fallback) {
+    const OmValue* v = at(key, pos);
+    return v ? parse_num(v->atom).value_or(fallback) : fallback;
+  };
+  const auto rgb = [&](std::string_view key, std::size_t pos) -> nlohmann::json {
+    const OmValue* v = at(key, pos);
+    const Rgb c = v ? parse_rgb(*v) : Rgb{};
+    return c.valid ? nlohmann::json::array({c.r, c.g, c.b}) : nlohmann::json(nullptr);
+  };
+  const auto points = [&](std::string_view key, std::size_t pos) {
+    nlohmann::json out = nlohmann::json::array();
+    if (const OmValue* v = at(key, pos); v && v->is_list)
+      for (const auto& pv : v->items) {
+        double x = 0.0;
+        double y = 0.0;
+        if (parse_vec2(pv, x, y)) out.push_back({x, y});
+      }
+    return out;
+  };
+  const auto box = [&](std::string_view key, std::size_t pos) -> std::optional<nlohmann::json> {
+    double x1 = 0.0, y1 = 0.0, x2 = 0.0, y2 = 0.0;
+    const OmValue* v = at(key, pos);
+    if (!v || !parse_box(*v, x1, y1, x2, y2)) return std::nullopt;
+    return nlohmann::json::array({x1, y1, x2, y2});
+  };
+
+  nlohmann::json g = {{"t", kind}};
+  if (const OmValue* vis = at("visible", 0)) {
+    const std::string v = trim(vis->atom);
+    if (v == "false") return std::nullopt;
+    if (!v.empty() && v != "true") g["visible"] = v;
+  }
+  double ox = 0.0, oy = 0.0;
+  if (const OmValue* o = at("origin", 1)) parse_vec2(*o, ox, oy);
+  if (ox != 0.0 || oy != 0.0) g["origin"] = {ox, oy};
+  if (const double rot = num("rotation", 2, 0.0); rot != 0.0) g["rotation"] = rot;
+
+  if (kind == "Line") {
+    g["points"] = points("points", 3);
+    if (g["points"].size() < 2) return std::nullopt;
+    g["color"] = rgb("color", 4);
+    g["pattern"] = en(at("pattern", 5), "Solid");
+    g["thickness"] = num("thickness", 6, 0.25);
+    if (const OmValue* a = at("arrow", 7); a && a->is_list && a->size() == 2)
+      g["arrow"] = {en(&(*a)[0], "None"), en(&(*a)[1], "None")};
+    g["arrowSize"] = num("arrowSize", 8, 3.0);
+    g["smooth"] = en(at("smooth", 9), "None");
+    return g;
+  }
+  g["lineColor"] = rgb("lineColor", 3);
+  g["fillColor"] = rgb("fillColor", 4);
+  g["pattern"] = en(at("pattern", 5), "Solid");
+  g["fillPattern"] = en(at("fillPattern", 6), "None");
+  g["thickness"] = num("thickness", 7, 0.25);
+  if (kind == "Polygon") {
+    g["points"] = points("points", 8);
+    if (g["points"].size() < 2) return std::nullopt;
+    g["smooth"] = en(at("smooth", 9), "None");
+  } else if (kind == "Rectangle") {
+    const auto b = box("extent", 9);
+    if (!b) return std::nullopt;
+    g["extent"] = *b;
+    g["radius"] = num("radius", 10, 0.0);
+  } else if (kind == "Ellipse") {
+    const auto b = box("extent", 8);
+    if (!b) return std::nullopt;
+    g["extent"] = *b;
+    g["startAngle"] = num("startAngle", 9, 0.0);
+    g["endAngle"] = num("endAngle", 10, 360.0);
+    g["closure"] = en(at("closure", 11), "Chord");
+  } else {  // Text
+    const auto b = box("extent", 8);
+    const OmValue* txt = at("textString", 9);
+    if (!b || !txt) return std::nullopt;
+    g["extent"] = *b;
+    g["text"] = txt->is_string ? txt->atom : unquote_all(txt->atom);
+    g["fontSize"] = num("fontSize", 10, 0.0);
+    g["textColor"] = rgb("textColor", 11);
+    g["align"] = en(at("horizontalAlignment", 14), "Center");
+  }
+  return g;
+}
+
 }  // namespace
 
 nlohmann::json quantise_icon(const std::vector<OmValue>& icon_annotations, const std::vector<IconPort>& ports,
@@ -758,6 +859,7 @@ ImportedModel import_class(Omc& omc, std::string_view class_name) {
   resolve_connectors(omc, cls, out.raw_ports, out.connectors, out.notice);
   const std::vector<IconPort> ports = quantise_ports(out.raw_ports, out.notice, extent);
   out.icon = quantise_icon(icon_annos, ports, out.notice, &extent);
+  out.art = icon_art(icon_annos);
   out.extent = extent;
   return out;
 }
@@ -794,6 +896,25 @@ ImportedModel import_model(Omc& omc, const fs::path& source, std::string_view cl
     }
   }
   return import_class(omc, target);
+}
+
+}  // namespace articula
+
+namespace articula {
+
+nlohmann::json icon_art(const std::vector<OmValue>& icon_annotations) {
+  nlohmann::json layers = nlohmann::json::array();
+  IconExtent ext{};
+  for (const auto& anno : icon_annotations) {
+    ext = extract_extent(anno, ext);
+    const OmValue* glist = extract_graphics_list(anno);
+    if (!glist) continue;
+    nlohmann::json g = nlohmann::json::array();
+    for (const auto& item : glist->items)
+      if (auto one = art_graphic(item)) g.push_back(std::move(*one));
+    if (!g.empty()) layers.push_back({{"extent", {ext.x1, ext.y1, ext.x2, ext.y2}}, {"g", std::move(g)}});
+  }
+  return layers;
 }
 
 }  // namespace articula

@@ -141,7 +141,7 @@ export async function readModel(omc: OmcCalls, name: string, file: string | unde
     const placement = placementOf(list(notes[i])[0]) ?? auto(index);
     index++;
     const defaults = await classDefaults(omc, cls);
-    components.push({ name: id, class: cls, params, ...(Object.keys(defaults).length ? { defaults } : {}), placement, ...(look.icon ? { icon: look.icon } : {}), ports: look.icon?.ports ?? [] });
+    components.push({ name: id, class: cls, params, ...(Object.keys(defaults).length ? { defaults } : {}), placement, ...(look.icon ? { icon: look.icon } : {}), ...(look.art?.length ? { art: look.art } : {}), ports: look.icon?.ports ?? [] });
 
     const causal = CAUSAL.exec(shortName(cls));
     if (causal && look.connector) {

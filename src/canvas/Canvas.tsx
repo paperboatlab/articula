@@ -30,6 +30,7 @@ import { endOf, isConnector, pathOf, split, wireError } from "../store/wires.ts"
 import { domainColor, domainOf } from "./domain.ts";
 import { centreFor, placedIcon, topLeft } from "./geometry.ts";
 import { QuickAdd } from "./QuickAdd.tsx";
+import { IconArt } from "../icon/art.tsx";
 
 type PartData = { part: ComponentInst; icon: IconDef; connectors: Connectors; wires: Record<string, number> };
 type PartNode = Node<PartData, "part">;
@@ -49,7 +50,9 @@ function inside(connectors: Connectors, part: ComponentInst): Connectors {
 function PartView({ id, data, selected }: NodeProps<PartNode>) {
   const { part, icon, connectors, wires } = data;
   const def = useMemo<BlockDef>(() => ({ type: part.class, label: part.name, kind: "function", inputs: [], outputs: [], params: [], view: { compact: true, icon } }), [part.class, part.name, icon]);
-  return <CompactBlock id={id} def={def} params={{ ...part.defaults, ...part.params }} selected={selected} connectors={connectors} wires={wires} />;
+  const params = { ...part.defaults, ...part.params };
+  const art = part.art && <IconArt art={part.art} icon={icon} place={part.placement} params={params} />;
+  return <CompactBlock id={id} def={def} params={params} selected={selected} connectors={connectors} wires={wires} art={art} />;
 }
 
 /** Save a wire's dragged bends (in the model's a-to-b order). */

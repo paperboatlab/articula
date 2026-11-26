@@ -65,7 +65,7 @@ export function Rail({
   const classes = workspace?.entries.filter((entry) => entry.kind === "class").length ?? 0;
 
   return (
-    <Panel name={workspaceName(workspace)} side="left" icon={tab === "files" ? "folder" : "a-library"} width={272}
+    <Panel name={workspaceName(workspace)} showName={false} side="left" icon={tab === "files" ? "folder" : "a-library"} width={272}
       hidden={collapsed} onHidden={(h) => onToggle?.(h)} className="side-files"
       count={tab === "files" ? `${classes} ${classes === 1 ? "class" : "classes"}` : undefined}
       head={<Tabs label="Files and library" value={tab} onChange={onTab} tabs={[{ value: "files", label: "Files" }, { value: "library", label: "Library" }]} />}>

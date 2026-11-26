@@ -416,6 +416,15 @@ void Omc::shutdown() {
   impl_->stop();
 }
 
+void Omc::set_project(const fs::path& project) {
+  std::lock_guard lock(impl_->mutex);
+  if (impl_->options.project == project) return;
+  impl_->options.project = project;
+  impl_->stop();
+  std::erase_if(impl_->replay, [](const std::string& r) { return r.starts_with("loadFile("); });
+  impl_->msl_tried = false;
+}
+
 void Omc::cancel() {
   // Not under the queue's lock (the call it ends holds it). omc can't stop a call, so the session
   // ends; the next call starts a new one and loads again what this one had.

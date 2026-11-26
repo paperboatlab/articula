@@ -5,8 +5,6 @@ import type { Workspace } from "../src/shell/workspace.ts";
 
 const workspace: Workspace = {
   root: "/w",
-  file: "/w/Pkg/Sub/B.mo",
-  package: true,
   entries: [
     { name: "Pkg", path: "/w/Pkg", kind: "package", depth: 0 },
     { name: "A", path: "/w/Pkg/A.mo", kind: "class", depth: 1 },

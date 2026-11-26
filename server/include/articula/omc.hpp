@@ -54,6 +54,9 @@ class Omc {
 
   /** Release omc now, without waiting for the destructor (SIGTERM/SIGINT). */
   void shutdown();
+  /** Work in another folder (empty: none): the session ends, and the next call starts one on the new
+      project, loading again the libraries the old one had (not its files: they aren't in the new one). */
+  void set_project(const std::filesystem::path& project);
   /** End the call in flight (a long simulate): it fails with "cancelled", and the next call
       starts a new session. Safe from any thread. */
   void cancel();

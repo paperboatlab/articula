@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { closeDoc, neighbour, openDoc, visibleEntries, workspaceName, type Doc, type WorkspaceEntry } from "../src/shell/workspace.ts";
+import { closeDoc, inside, neighbour, openDoc, visibleEntries, workspaceName, type Doc, type WorkspaceEntry } from "../src/shell/workspace.ts";
 
 const entries: WorkspaceEntry[] = [
   { name: "Pkg", path: "/w/Pkg", kind: "package", depth: 0 },
@@ -41,7 +41,15 @@ test("closing a document leaves a neighbour to show, never a hole", () => {
 });
 
 test("the rail names the folder it is in", () => {
-  assert.equal(workspaceName({ root: "/home/me/chiller", file: "/home/me/chiller/A.mo", package: false, entries: [] }), "chiller");
-  assert.equal(workspaceName({ root: "/", file: "/A.mo", package: false, entries: [] }), "/");
+  assert.equal(workspaceName({ root: "/home/me/chiller", entries: [] }), "chiller");
+  assert.equal(workspaceName({ root: "/", entries: [] }), "/");
   assert.equal(workspaceName(null), "workspace");
+});
+
+test("a path is inside a workspace root, never a sibling that shares its start", () => {
+  assert.ok(inside("/w/a/B.mo", "/w/a"));
+  assert.ok(inside("/w/a", "/w/a"));
+  assert.ok(inside("/w/a/B.mo", "/w/a/"));
+  assert.ok(!inside("/w/ab/B.mo", "/w/a"));
+  assert.ok(!inside("/w/B.mo", "/w/a"));
 });

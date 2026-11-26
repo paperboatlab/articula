@@ -277,25 +277,6 @@ std::string load_file(Omc& omc, const fs::path& file) {
   throw std::runtime_error("no class in " + file.string());
 }
 
-json op_open(Omc& omc, const json& in, const Session& session) {
-  fs::path file;
-  if (in.contains("file") && in["file"].is_string() && !in["file"].get<std::string>().empty()) {
-    file = in["file"].get<std::string>();
-  } else {
-    file = session.file.empty() ? fs::path("Untitled.mo") : session.file;
-  }
-  if (in.contains("content") && in["content"].is_string()) {
-    std::ofstream(file) << in["content"].get<std::string>();
-  } else if (!fs::exists(file)) {
-    const std::string name = file.stem().string();
-    std::ofstream(file) << "model " << name << "\nend " << name << ";\n";
-  }
-  return {{"file", fs::absolute(file).string()}, {"model", load_file(omc, file)}};
-}
-
-// The folder the open model lives in, for the Files rail: every package (a folder with a
-// package.mo) down to its classes, or, for a model outside a package, the .mo files beside it.
-// A single model in a plain folder is a workspace of one, which is the quick path.
 // The kind a .mo declares, for the rail's glyph: skip comments, `within` and a leading
 // partial/expandable/operator/pure, then take the class keyword.
 std::string class_kind(const fs::path& file) {
@@ -316,25 +297,22 @@ std::string class_kind(const fs::path& file) {
   return "class";
 }
 
-json op_workspace(const json& in) {
-  const std::string target = in.value("file", "");
-  if (target.empty()) throw std::runtime_error("workspace needs a file");
-  const fs::path file = fs::absolute(target);
-  fs::path root = file.parent_path();
-  while (fs::exists(root / "package.mo") && root.parent_path() != root) root = root.parent_path();
-
+// The workspace's tree, for the Files rail: every package (a folder with a package.mo) down to its
+// classes, and the .mo files beside them.
+json tree_of(const fs::path& root) {
   const std::set<std::string> skip = {".git", "build", "dist", "node_modules", ".cache", "__pycache__"};
   json entries = json::array();
   std::function<void(const fs::path&, int)> walk = [&](const fs::path& dir, int depth) {
     if (depth > 6 || entries.size() >= 500) return;
     std::vector<fs::path> children;
-    for (const auto& entry : fs::directory_iterator(dir)) children.push_back(entry.path());
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(dir, fs::directory_options::skip_permission_denied, ec)) children.push_back(entry.path());
     std::sort(children.begin(), children.end());
     for (const fs::path& path : children) {
       const std::string name = path.filename().string();
-      if (skip.contains(name)) continue;
-      if (fs::is_directory(path)) {
-        if (!fs::exists(path / "package.mo")) continue;  // only packages make the tree
+      if (skip.contains(name) || name.starts_with(".")) continue;
+      if (fs::is_directory(path, ec)) {
+        if (!fs::exists(path / "package.mo", ec)) continue;  // only packages make the tree
         entries.push_back({{"name", name}, {"path", path.string()}, {"kind", "package"}, {"depth", depth}});
         walk(path, depth + 1);
       } else if (path.extension() == ".mo" && name != "package.mo") {
@@ -343,11 +321,9 @@ json op_workspace(const json& in) {
     }
   };
   walk(root, 0);
-  return {{"root", root.string()},
-          {"file", file.string()},
-          {"package", fs::exists(file.parent_path() / "package.mo")},
-          {"entries", entries}};
+  return {{"root", root.string()}, {"entries", entries}};
 }
+
 
 // `git -C <root> <args>`, run without a shell: its stdout, or nullopt when git is missing, the
 // folder is no repository, or the call fails.
@@ -401,6 +377,7 @@ std::vector<std::string> nul_split(const std::string& z) {
   if (at < z.size()) out.push_back(z.substr(at));
   return out;
 }
+
 
 // The git gutter (the same shape as MX's /__mx/workspace/git): HEAD's copy of each tracked .mo
 // under the workspace root (`head`), the .mo files HEAD lacks (`untracked`: untracked, or staged
@@ -1606,6 +1583,8 @@ nlohmann::json visual_shapes(const std::string& xml, const std::function<json(co
   return shapes;
 }
 
+namespace {
+
 // ── Hubs (paperboat#16): Malachite's, read through `paperboat hub list --json` (no Malachite, no hub).
 // Articula opens files one by one, so the file decides the hub: Open and Save as pick from a hub's tree.
 
@@ -1632,7 +1611,9 @@ json hub_tree(const fs::path& root, std::size_t* count = nullptr) {
     }
     for (const fs::path& f : files) {
       if (f.extension() == ".mo" && f.filename() != "package.mo") ++mo;
-      entries.push_back({{"name", f.filename().string()}, {"path", fs::relative(f, root).generic_string()}, {"kind", "file"}, {"depth", depth}});
+      const auto at = std::chrono::clock_cast<std::chrono::system_clock>(fs::last_write_time(f, ec));
+      entries.push_back({{"name", f.filename().string()}, {"path", fs::relative(f, root).generic_string()}, {"kind", "file"}, {"depth", depth},
+                         {"size", fs::file_size(f, ec)}, {"at", std::chrono::duration_cast<std::chrono::seconds>(at.time_since_epoch()).count()}});
     }
   };
   walk(root, 0);
@@ -1640,15 +1621,16 @@ json hub_tree(const fs::path& root, std::size_t* count = nullptr) {
   return entries;
 }
 
-// The hubs this machine knows, each with how many models it holds; [] without paperboat or Malachite.
+// The hubs this machine knows, each with how many models it holds; null without paperboat or Malachite
+// (no Malachite, no hub words), [] when it knows none.
 json op_hubs() {
   json list;
   try {
     list = json::parse(paperboat_output("hub list --json"));
   } catch (const json::exception&) {
-    return json::array();
+    return nullptr;
   }
-  if (!list.is_array()) return json::array();
+  if (!list.is_array()) return nullptr;
   json out = json::array();
   for (const json& h : list) {
     if (!h.is_object() || !h.contains("id") || !h.contains("path")) continue;
@@ -1702,16 +1684,248 @@ json op_hub_open_malachite(const json& in) {
   return json::object();
 }
 
-// A model picked from a hub: here when it is in this window's workspace (omc sees only that folder),
-// else in a new Articula window on its own workspace. {here: bool}.
-json op_open_window(const json& in, const Session& session) {
-  const fs::path file = fs::absolute(in.value("file", ""));
-  if (!fs::is_regular_file(file)) throw std::runtime_error("no file " + file.string());
-  const fs::path rel = fs::relative(file, workspace_of(fs::absolute(session.file)));
-  if (!rel.empty() && *rel.begin() != "..") return {{"here", true}};
-  open_app("articula", file.string());
-  return {{"here", false}};
+// ── The workspace (plans/2026-11-26_11-05_one_file_workflow.md): a folder, a hub, or none (the Start
+// page), switched at runtime; omc's lease follows it (its project). One per server, shared by its pages.
+
+struct Place {
+  std::string kind;  // "folder", "hub", or "" (none)
+  fs::path root = {};
+  std::string name = {};
+  std::string hub = {};  // a hub's id
+};
+std::mutex place_mutex;
+Place place;
+
+Place current_place() {
+  std::lock_guard lock(place_mutex);
+  return place;
 }
+
+json place_json(const Place& p) {
+  if (p.kind.empty()) return {{"kind", nullptr}};
+  json out{{"kind", p.kind}, {"root", p.root.string()}, {"name", p.name}};
+  if (!p.hub.empty()) out["hub"] = p.hub;
+  return out;
+}
+
+std::string home_dir() {
+  const char* home = std::getenv("HOME");
+  if (!home || !*home) home = std::getenv("USERPROFILE");
+  return home ? home : "";
+}
+
+// A path as the user gave it: ~ is the home folder; the result absolute, without a trailing separator.
+fs::path user_path(std::string p) {
+  if (p == "~" || p.starts_with("~/") || p.starts_with("~\\")) p = home_dir() + p.substr(1);
+  fs::path out = fs::absolute(fs::path(p)).lexically_normal();
+  return out.has_filename() || out == out.root_path() ? out : out.parent_path();
+}
+
+bool inside(const fs::path& path, const fs::path& root) {
+  const fs::path rel = path.lexically_relative(root);
+  return !rel.empty() && *rel.begin() != "..";
+}
+
+std::string folder_name(const fs::path& dir) { return dir.has_filename() ? dir.filename().string() : dir.string(); }
+
+// The known hub whose folder is `path` (exact) or holds it; null when none (no Malachite, no hub).
+json hub_at(const fs::path& path, bool exact) {
+  for (const json& h : op_hubs()) {
+    const fs::path root = fs::path(h.value("root", "")).lexically_normal();
+    if (!h.value("missing", false) && (exact ? path == root : inside(path, root))) return h;
+  }
+  return nullptr;
+}
+
+Place hub_place(const json& h) { return {"hub", fs::path(h.value("root", "")).lexically_normal(), h.value("name", ""), h["id"].get<std::string>()}; }
+
+// Where a file lives: the hub holding it, else its folder (the one holding its top package).
+Place place_of_file(const fs::path& file) {
+  if (const json h = hub_at(file, false); h.is_object()) return hub_place(h);
+  const fs::path root = workspace_of(file);
+  return {"folder", root, folder_name(root)};
+}
+
+// ── The shared store under $PAPERBOAT_HOME (as paperboat/src/lib/paths.cpp): recent.json, settings.json.
+
+fs::path paperboat_home() {
+  const auto env = [](const char* key) { const char* v = std::getenv(key); return std::string(v ? v : ""); };
+  if (const auto v = env("PAPERBOAT_HOME"); !v.empty()) return v;
+#ifdef _WIN32
+  if (const auto v = env("LOCALAPPDATA"); !v.empty()) return fs::path(v) / "paperboat";
+#endif
+  if (const auto v = env("XDG_DATA_HOME"); !v.empty()) return fs::path(v) / "paperboat";
+  return fs::path(env("HOME")) / ".local" / "share" / "paperboat";
+}
+
+std::mutex store_mutex;  // this server's writers; another app's write in between is last-writer-wins
+
+json read_store(const std::string& name) {
+  std::ifstream in(paperboat_home() / name);
+  json v = in ? json::parse(in, nullptr, false) : json();
+  return v.is_object() ? v : json::object();
+}
+
+// Written whole to a temp file, then renamed over: a reader never sees half of it.
+void write_store(const std::string& name, const json& value) {
+  const fs::path file = paperboat_home() / name;
+  fs::create_directories(file.parent_path());
+  const fs::path tmp = file.string() + "." + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".tmp";
+  {
+    std::ofstream out(tmp, std::ios::binary);
+    out << value.dump(2) << '\n';
+    if (!out) throw std::runtime_error("cannot write " + tmp.string());
+  }
+  fs::rename(tmp, file);
+}
+
+constexpr std::size_t recent_max = 40;
+
+long long now_seconds() {
+  return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+// recent.json's entries, newest first, without the ones that aren't entries.
+json recent_list() {
+  const json store = read_store("recent.json");
+  json out = json::array();
+  if (store.contains("recent") && store["recent"].is_array())
+    for (const json& e : store["recent"])
+      if (e.is_object() && e.contains("kind") && e["kind"].is_string() && e.contains("path") && e["path"].is_string() && e.contains("at") && e["at"].is_number())
+        out.push_back(e);
+  return out;
+}
+
+// One thing opened, first in the list: an older entry of the same kind and path goes.
+void remember(const std::string& kind, const fs::path& path, const std::string& hub = "") {
+  try {
+    std::lock_guard lock(store_mutex);
+    json entry{{"kind", kind}, {"path", path.string()}, {"app", "articula"}, {"at", now_seconds()}};
+    if (!hub.empty()) entry["hub"] = hub;
+    json list = json::array({entry});
+    for (const json& e : recent_list())
+      if (list.size() < recent_max && !(e["kind"] == kind && e["path"] == path.string())) list.push_back(e);
+    write_store("recent.json", {{"version", 1}, {"recent", list}});
+  } catch (const std::exception&) {
+    // the list is a convenience: never a reason to fail an open
+  }
+}
+
+json op_recent() { return {{"version", 1}, {"recent", recent_list()}, {"home", home_dir()}}; }
+
+// One entry gone ({kind, path}: a folder that is gone), or every one (Clear recent).
+json op_recent_forget(const json& in) {
+  {
+    std::lock_guard lock(store_mutex);
+    json list = json::array();
+    if (in.contains("path"))
+      for (const json& e : recent_list())
+        if (!(e["kind"] == in.value("kind", "") && e["path"] == in["path"])) list.push_back(e);
+    write_store("recent.json", {{"version", 1}, {"recent", list}});
+  }
+  return op_recent();
+}
+
+json op_settings() {
+  const json s = read_store("settings.json");
+  const std::string theme = s.contains("theme") && s["theme"].is_string() ? s["theme"].get<std::string>() : "";
+  return {{"version", 1}, {"theme", theme == "light" || theme == "dark" ? theme : "system"}};
+}
+
+// The theme every app starts in; the other keys another app wrote stay.
+json op_settings_write(const json& in) {
+  const std::string theme = in.value("theme", "");
+  if (theme != "light" && theme != "dark" && theme != "system") throw std::runtime_error("theme is light, dark or system");
+  {
+    std::lock_guard lock(store_mutex);
+    json s = read_store("settings.json");
+    s["version"] = 1;
+    s["theme"] = theme;
+    write_store("settings.json", s);
+  }
+  return op_settings();
+}
+
+// ── Switching: Open folder, Connect to a hub, Close; and a file from outside (op_open).
+
+json work_in(Omc& omc, const Place& next) {
+  {
+    std::lock_guard lock(place_mutex);
+    place = next;
+  }
+  omc.set_project(next.root);
+  if (!next.kind.empty()) remember(next.kind, next.root, next.hub);
+  return place_json(next);
+}
+
+// Open folder…: a folder that is a known hub's opens as the hub; a package's folder opens the folder
+// holding its top package (omc loads a package from there).
+json op_open_folder(Omc& omc, const json& in) {
+  const std::string given = in.value("path", "");
+  if (given.empty()) throw std::runtime_error("open_folder needs a path");
+  const fs::path dir = user_path(given);
+  if (!fs::is_directory(dir)) throw std::runtime_error("no folder " + dir.string());
+  const fs::path root = workspace_of(dir);
+  if (const json h = hub_at(root, true); h.is_object()) return work_in(omc, hub_place(h));
+  return work_in(omc, {"folder", root, folder_name(root)});
+}
+
+json op_connect(Omc& omc, const json& in) {
+  const std::string id = in.value("hub", "");
+  for (const json& h : op_hubs()) {
+    if (h["id"] != id) continue;
+    if (h.value("missing", false)) throw std::runtime_error("can't find the folder of " + h.value("name", id));
+    return work_in(omc, hub_place(h));
+  }
+  throw std::runtime_error("no hub " + id + " (paperboat hub list shows them)");
+}
+
+json op_tree() {
+  const Place now = current_place();
+  if (now.kind.empty()) throw std::runtime_error("no folder open");
+  return tree_of(now.root);
+}
+
+// Open a .mo: a relative name lands in the workspace (none: Articula's own folder); one from outside
+// switches the workspace to its hub or folder first, so omc sees it. No file: the model the server was
+// started on, while its workspace is still open; else none. {file, model, workspace}.
+json op_open(Omc& omc, const json& in, const Session& session) {
+  Place now = current_place();
+  fs::path file;
+  if (in.contains("file") && in["file"].is_string() && !in["file"].get<std::string>().empty()) {
+    const std::string given = in["file"].get<std::string>();
+    file = given.starts_with("~") ? user_path(given) : fs::path(given);
+    if (file.is_relative()) file = (now.kind.empty() ? default_workspace() : now.root) / file;
+    file = file.lexically_normal();
+  } else if (!session.file.empty() && !now.kind.empty() && inside(session.file, now.root)) {
+    file = session.file;
+  } else {
+    return {{"file", nullptr}, {"model", nullptr}, {"workspace", place_json(now)}};
+  }
+  if (file.extension() != ".mo") throw std::runtime_error("Articula opens .mo files: " + file.filename().string() + " isn't one");
+  fs::create_directories(file.parent_path());
+  if (in.contains("content") && in["content"].is_string()) {
+    // a dropped file lands here: never over another one of that name
+    const std::string content = in["content"].get<std::string>();
+    std::ifstream there(file, std::ios::binary);
+    if (there && std::string((std::istreambuf_iterator<char>(there)), {}) != content)
+      throw std::runtime_error(file.filename().string() + " is already in " + file.parent_path().string() + ": open that one, or rename yours");
+    there.close();
+    std::ofstream(file, std::ios::binary) << content;
+  } else if (!fs::exists(file)) {
+    const std::string name = file.stem().string();
+    std::ofstream(file) << "model " << name << "\nend " << name << ";\n";
+  }
+  if (now.kind.empty() || !inside(file, now.root)) {
+    now = place_of_file(file);
+    work_in(omc, now);
+  }
+  const std::string model = load_file(omc, file);
+  remember("file", file, now.hub);
+  return {{"file", file.string()}, {"model", model}, {"workspace", place_json(now)}};
+}
+
+}  // namespace
 
 std::string handle(Omc& omc, const std::string& message, const Session& session) {
   json in;
@@ -1749,7 +1963,23 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
     } else if (op == "packages") {
       out["result"] = op_packages(omc, in);
     } else if (op == "workspace") {
-      out["result"] = op_workspace(in);
+      out["result"] = place_json(current_place());
+    } else if (op == "open_folder") {
+      out["result"] = op_open_folder(omc, in);
+    } else if (op == "connect") {
+      out["result"] = op_connect(omc, in);
+    } else if (op == "close_workspace") {
+      out["result"] = work_in(omc, {});
+    } else if (op == "tree") {
+      out["result"] = op_tree();
+    } else if (op == "recent") {
+      out["result"] = op_recent();
+    } else if (op == "recent_forget") {
+      out["result"] = op_recent_forget(in);
+    } else if (op == "settings") {
+      out["result"] = op_settings();
+    } else if (op == "settings_write") {
+      out["result"] = op_settings_write(in);
     } else if (op == "git") {
       out["result"] = op_git(in);
     } else if (op == "config") {
@@ -1767,8 +1997,6 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_hub_new(in);
     } else if (op == "hub_open_malachite") {
       out["result"] = op_hub_open_malachite(in);
-    } else if (op == "open_window") {
-      out["result"] = op_open_window(in, session);
     } else if (op == "create_class") {
       out["result"] = op_create_class(in);
     } else if (op == "new_package") {
@@ -1805,7 +2033,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in, session);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; articula/0 has omc, open, workspace, config, config_write, about, hubs, hub_files, hub_new, hub_open_malachite, open_window, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
+      out["error"] = "unknown op; articula/0 has omc, open, workspace, open_folder, connect, close_workspace, tree, recent, recent_forget, settings, settings_write, config, config_write, about, hubs, hub_files, hub_new, hub_open_malachite, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
       return out.dump();
     }
     out["ok"] = true;
@@ -1814,8 +2042,12 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
     out["error"] = e.what();
   }
   // Drain once per operation so the Console hears omc, and a later getErrorString can read it.
-  // If an op already read the messages (errors() or its own drain), keep that read.
-  if (!errors_read) {
+  // If an op already read the messages (errors() or its own drain), keep that read. The ops that only
+  // read or write files never start omc for it (the Start page needs none), nor does `open` with nothing to open.
+  static const std::set<std::string> disk_only = {"workspace", "open_folder", "connect", "close_workspace", "tree", "recent",
+                                                  "recent_forget", "settings", "settings_write", "config", "config_write", "about",
+                                                  "git", "hubs", "hub_files", "hub_new", "hub_open_malachite"};
+  if (!errors_read && !disk_only.contains(op) && !omc.version().empty()) {  // a never-started omc has said nothing
     try {
       if (omc.last_messages().empty()) omc.messages();
     } catch (...) {
@@ -1832,16 +2064,6 @@ fs::path default_workspace() {
   return fs::path(home && *home ? home : ".") / "Documents" / "paperboat" / "articula";
 }
 
-fs::path default_file(const fs::path& dir) {
-  fs::create_directories(dir);
-  std::vector<fs::path> models;
-  for (const auto& entry : fs::directory_iterator(dir))
-    if (entry.is_regular_file() && entry.path().extension() == ".mo" && entry.path().filename() != "package.mo")
-      models.push_back(entry.path());
-  std::sort(models.begin(), models.end());
-  return models.empty() ? dir / "Untitled.mo" : models.front();
-}
-
 fs::path workspace_of(const fs::path& file) {
   fs::path root = fs::is_directory(file) ? file : file.parent_path();
   while (fs::exists(root / "package.mo") && root.has_parent_path() && root.parent_path() != root) root = root.parent_path();
@@ -1850,9 +2072,8 @@ fs::path workspace_of(const fs::path& file) {
 
 int serve_articula(int port, const fs::path& app, Omc::Options options, const fs::path& given) {
   ix::initNetSystem();
-  // No model named: open the Studio's own folder, never the launch directory. A folder: its first model.
-  const fs::path file = given.empty() ? default_file() : fs::is_directory(given) ? default_file(given) : fs::absolute(given);
-  if (options.project.empty()) options.project = workspace_of(file);
+  // Nothing named: no workspace (the Start page). A folder: it, no model yet. A file: its folder or hub.
+  const fs::path file = given.empty() || fs::is_directory(given) ? fs::path() : user_path(given.string());
   // SIGTERM (a closed terminal, `paperboat stop`, systemd) and SIGINT (Ctrl-C) both mean
   // "stop": wake the loop below so omc is stopped on purpose, not just orphaned.
   stop_requested.store(false, std::memory_order_relaxed);
@@ -1871,6 +2092,8 @@ int serve_articula(int port, const fs::path& app, Omc::Options options, const fs
   sigaction(SIGINT, &sa, nullptr);
 #endif
   Omc omc(std::move(options));
+  if (!file.empty()) work_in(omc, place_of_file(file));
+  else if (!given.empty()) op_open_folder(omc, {{"path", given.string()}});
   // port 0: Articula's home port 30472, else the first free one of 30500..30599 (further folders)
   if (port == 0 && !listening(30472)) port = 30472;
   for (int p = 30500; port == 0 && p <= 30599; ++p)
@@ -1926,7 +2149,7 @@ int serve_articula(int port, const fs::path& app, Omc::Options options, const fs
   server.start();
   std::cout << "Articula server (articula/0) on ws://localhost:" << port
             << (app.empty() ? std::string() : "  app: http://localhost:" + std::to_string(port) + "/") << '\n'
-            << "opens " << fs::absolute(file).string() << std::endl;
+            << "opens " << (file.empty() ? given.empty() ? std::string("the Start page") : given.string() : file.string()) << std::endl;
   // Start omc now so the first status a client sees is real.
   try {
     omc.call("getVersion()");

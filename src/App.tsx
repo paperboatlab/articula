@@ -1,17 +1,19 @@
 // Articula: an OpenModelica editor (agent-docs/rebrand; the window of Julix and Malachite): the bar (mark,
-// menus, the model, Check and Simulate, the runtimes key, the Panels key, the theme); Files and Library
-// at the left; the model's views in the middle (diagram, icon, 3D, text) over the Console; the source
-// and Simulate at the right. Provides StudioContext; the popover opens on a component click, the
-// interface sheet on Alt V, the export dock under the stage.
+// menus, the workspace well, Check and Simulate, the runtimes key, the Panels key, the theme, the window
+// keys); Files and Library at the left; the model's views in the middle (diagram, icon, 3D, text) over the
+// Console; the source and Simulate at the right. Without a workspace, the Start page in the bay (the one
+// file workflow: plans/2026-11-26_11-05_one_file_workflow.md). Provides StudioContext; the popover opens on
+// a component click, the interface sheet on Alt V, the export dock under the stage.
 
 import { ReactFlowProvider } from "@xyflow/react";
-import { About, AppMark, Key, MenuBar, Notifications, Panel, PanelsKey, RuntimesKey, Search, Segmented, Split as Gutter, ThemePicker, Toasts, readStored, useToasts, writeStored, type PaneRect, type SearchItem } from "@paperboatlab/ui";
+import { About, AppMark, Key, MenuBar, Notifications, Panel, PanelsKey, RuntimesKey, Search, Segmented, Split as Gutter, ThemePicker, Toasts, WindowKeys, readStored, useToasts, writeStored, type PaneRect, type SearchItem, type Theme } from "@paperboatlab/ui";
 import { HelpWindow } from "@paperboatlab/ui";
 import { afterClose, EditorTabs, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
 import { helpCommand, SEARCH_CHORD, useShortcuts, type Command } from "@paperboatlab/ui";
 import { omHelp } from "./shell/help.ts";
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { HubSelector, OpenFile, SaveFile, type Hub } from "@paperboatlab/ui/hub";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { ConnectHub, OpenFile, SaveFile, type Hub } from "@paperboatlab/ui/hub";
+import { AskOpen, baseName, fileMenu, parseRecent, parseSettings, recentFor, recentMenu, shell, Start, TypedPath, Unsaved, when, WorkspaceWell, type RecentEntry, type Workspace as Place } from "@paperboatlab/ui/workspace";
 import type { FileEntry } from "@paperboatlab/ui/files";
 import { useAppConfig as useSqueroConfig, type ConfigStore } from "@paperboatlab/ui/editor";
 import { Canvas } from "./canvas/Canvas.tsx";
@@ -39,7 +41,7 @@ import { Rail, type RailTab } from "./shell/Rail.tsx";
 import { TextStage, type TextEditorHandle } from "./shell/TextStage.tsx";
 import { NewClassSheet } from "./shell/NewClassSheet.tsx";
 import type { NewClassSpec } from "./shell/newClass.ts";
-import { closeDoc, neighbour, openDoc, workspaceName, type Doc, type GitState, type Workspace, type WorkspaceEntry } from "./shell/workspace.ts";
+import { closeDoc, inside, neighbour, openDoc, type Doc, type GitState, type Workspace, type WorkspaceEntry } from "./shell/workspace.ts";
 import { packageName } from "./shell/newClass.ts";
 import { freeSpot } from "./store/plans.ts";
 import { useStudioStore } from "./store/index.tsx";
@@ -138,11 +140,22 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [workspaceTick, setWorkspaceTick] = useState(0);
   // Documents and their folder listings read once: switching back is a state restore, not omc again.
   const modelCache = useRef(new Map<string, StudioModel>());
-  const workspaceCache = useRef(new Map<string, Workspace>());
   const [shapeRun, setShapeRun] = useState<ShapeRun | null>(null);
-  // The app theme and the editor settings, from the user's squero.toml (shared with MX).
+  // The editor settings, from the user's articula.toml; the theme is every app's, in $PAPERBOAT_HOME/settings.json
+  // (read again when the window comes back: another app may have changed it), cached here against a flash.
   const settings = useSqueroConfig(config, { editor: "articula.editor", theme: "paperboat.theme" });
-  const { theme, setTheme } = settings;
+  const [theme, setThemeNow] = useState<Theme>(() => parseSettings({ theme: readStored("articula.theme", (v): v is string => typeof v === "string") }).theme);
+  const setTheme = useCallback((t: Theme) => {
+    setThemeNow(t);
+    writeStored("articula.theme", t);
+    void omc.op("settings_write", { theme: t }).catch(() => undefined);
+  }, [omc]);
+  useEffect(() => {
+    const read = () => void omc.op("settings").then((v) => { const t = parseSettings(v).theme; setThemeNow(t); writeStored("articula.theme", t); }, () => undefined);
+    read();
+    window.addEventListener("focus", read);
+    return () => window.removeEventListener("focus", read);
+  }, [omc]);
   const shown = useTheme(theme);
   const [promptModal, setPromptModal] = useState<PromptSpec | null>(null);
   const [confirmModal, setConfirmModal] = useState<ConfirmSpec | null>(null);
@@ -197,43 +210,28 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     }
     if (status.state === "ready") s.up = true;
   }, [status.state, show]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  // The hubs (paperboat#16), read on start and whenever the picker opens; none without Malachite. The file
-  // decides the hub: a model opened from inside one puts Articula there, and the bar shows its selector.
-  const [hubs, setHubs] = useState<AppHub[]>([]);
-  const [picker, setPicker] = useState<"open" | "save" | null>(null);
-  const readHubs = useCallback(() => omc.op<AppHub[]>("hubs").then((h) => setHubs(h ?? []), () => setHubs([])), [omc]);
+  // The hubs (paperboat#16), read on start and whenever they are offered; null without Malachite (no
+  // Malachite, no hub words).
+  const [hubs, setHubs] = useState<AppHub[] | null>(null);
+  const malachite = hubs !== null;
+  const readHubs = useCallback(() => omc.op<AppHub[] | null>("hubs").then((h) => setHubs(Array.isArray(h) ? h : null), () => setHubs(null)), [omc]);
   useEffect(() => void readHubs(), [readHubs]);
-  const hubFiles = useCallback((h: Hub) => omc.op<FileEntry[]>("hub_files", { root: (h as AppHub).root }), [omc]);
   const classes = useClassIndex(omc);
 
   const model = api?.model;
   const modelFile = model?.file ?? "";
-  const hub = modelFile ? hubs.find((h) => !h.missing && modelFile.startsWith(`${h.root}/`)) : undefined;
-  /** File › Open…: the kit's picker when there are hubs, else the system's straight away. */
-  const openPicker = () => (hubs.length ? (setPicker("open"), void readHubs()) : fileInputRef.current?.click());
-  const savePrompt = () =>
-    setPromptModal({
-      title: "Save Model As",
-      label: "File Path",
-      value: model?.file ?? `${model?.name}.mo`,
-      confirmLabel: "Save",
-      onConfirm: (path) => actions.saveAs(path).catch((e) => fail(e, "Couldn't save")),
-    });
-  /** A model from a hub opens here when omc can see it (this window's workspace), else in a new Articula window. */
-  const openFromHub = (file: string) =>
-    omc.op<{ here: boolean }>("open_window", { file }).then(
-      (r) => (r.here ? openDocument(file) : void show({ title: "Opening in a new Articula window", detail: file.slice(file.lastIndexOf("/") + 1), state: "done" })),
-      (e) => fail(e, "Couldn't open the model"),
-    );
-  const newHub = () =>
-    setPromptModal({
-      title: "New hub",
-      label: "Name",
-      placeholder: "e.g. tank-lab",
-      confirmLabel: "Make",
-      onConfirm: (name) => omc.op<AppHub[]>("hub_new", { name }).then((h) => setHubs(h ?? []), (e) => fail(e, "Couldn't make the hub")),
-    });
+
+  // ── The workspace (the one file workflow): a folder, a hub, or none (the Start page); the server
+  // switches it, and keeps the recent list every app shares. undefined: not read yet.
+  const [place, setPlace] = useState<Place | null | undefined>(undefined);
+  const placeRoot = useRef<string | null>(null);
+  const [recent, setRecent] = useState<RecentEntry[]>([]);
+  const [home, setHome] = useState<string>();
+  const readRecent = useCallback(() => omc.op<{ home?: string }>("recent").then((r) => { setRecent(parseRecent(r).recent); setHome(r.home); }, () => undefined), [omc]);
+  const hub = place?.kind === "hub" ? hubs?.find((h) => h.id === place.hub) : undefined;
+  // the dialogs of the workflow: Open asks, Connect, our picker over the hub, a typed path in a browser
+  const [ask, setAsk] = useState<"open" | "connect" | "pickOpen" | "pickSave" | "folder" | "file" | null>(null);
+  const [unsaved, setUnsaved] = useState<{ closing?: string; then: (autosave: boolean) => Promise<void> | void } | null>(null);
   const currentEntry = workspace?.entries.find((entry) => entry.path === model?.file);
   const canExport = currentEntry ? currentEntry.classKind === "model" || currentEntry.classKind === "block" : false;
   const classKind = currentEntry?.classKind;
@@ -278,32 +276,20 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     modelCache.current.set(file, model);
   }, [model, model?.file, model?.name]);
 
-  // The folder the model sits in, for the Files rail. A workspace read is never fatal: the rail
-  // just shows the open documents when the server can't list the folder.
+  // The workspace's tree, for the Files rail. A read is never fatal: the rail is empty when the server
+  // can't list the folder.
   useEffect(() => {
-    const file = model?.file;
-    if (!file) {
+    const root = place?.root;
+    if (!root) {
       setWorkspace(null);
       return;
     }
-    const cached = workspaceCache.current.get(file);
-    if (cached) {
-      setWorkspace(cached);
-      return;
-    }
     let live = true;
-    omc.op<Workspace>("workspace", { file }).then(
-      (next) => {
-        if (!live) return;
-        setWorkspace(next);
-        workspaceCache.current.set(file, next);
-      },
-      () => live && setWorkspace(null),
-    );
+    omc.op<Workspace>("tree").then((next) => live && setWorkspace(next), () => live && setWorkspace(null));
     return () => {
       live = false;
     };
-  }, [omc, model?.file, workspaceTick]);
+  }, [omc, place?.root, workspaceTick]);
 
   // Git, for the Text view's gutter and the rail's M/U: read again when the folder or what is saved
   // changes, and when the window regains focus (a commit in a terminal, say).
@@ -314,7 +300,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     window.addEventListener("focus", bump);
     return () => window.removeEventListener("focus", bump);
   }, []);
-  const gitRoot = workspace?.root;
+  const gitRoot = place?.kind === "folder" ? place.root : undefined;  // inside a hub no app shows Git
   const savedState = `${actions.dirty}|${textDirty}`;
   const workingFile = model?.file ? model.file.slice(model.file.lastIndexOf("/") + 1) : model?.name;
   const fileDirty = actions.dirty || textDirty;
@@ -328,11 +314,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     return () => { live = false; };
   }, [omc, gitRoot, workspaceTick, gitTick, savedState]);
 
-  /** A create/delete/duplicate changed the folder: forget every listing and read the active one again. */
-  const refreshWorkspace = () => {
-    workspaceCache.current.clear();
-    setWorkspaceTick((t) => t + 1);
-  };
+  /** A create/delete/duplicate changed the folder: read its tree again. */
+  const refreshWorkspace = () => setWorkspaceTick((t) => t + 1);
 
   useEffect(() => {
     if (actions.notice.text) say(actions.notice.text, actions.notice.failed ? "error" : "info");
@@ -344,31 +327,154 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     return actions.save();
   };
 
-  /** Switch documents: save the current one first, so a tab is never a stale buffer. */
-  const openDocument = async (file: string, content?: string) => {
+  /** What the workspace is now (the server's word): the tabs and models outside it go. */
+  const applyPlace = (next: Place | null) => {
+    const root = next?.root ?? null;
+    setPlace(next);
+    void readRecent();
+    if (root === placeRoot.current) return;
+    placeRoot.current = root;
+    const keep = (f: string) => root !== null && inside(f, root);
+    setDocs((list) => list.filter((d) => keep(d.file)));
+    setPinned((now) => new Set([...now].filter(keep)));
+    for (const f of [...modelCache.current.keys()]) if (!keep(f)) modelCache.current.delete(f);
+    if (next?.kind === "hub") void readHubs();
+  };
+  const readPlace = () => omc.op<Place | { kind: null }>("workspace").then((w) => applyPlace(w.kind ? w as Place : null));
+  useEffect(() => void readPlace().catch((e: Error) => fail(e, "Couldn't read the workspace")), [omc]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Switch documents: save the current one first (unless it is being let go), so a tab is never a stale
+   *  buffer. A file from outside the workspace switches it: the server says where to. */
+  const openDocument = async (file: string, content?: string, autosave = true) => {
     if (file === model?.file) return;
     try {
       const editor = editorHandle.current;
-      if (editor?.dirty) await editor.save();
-      else if (actions.dirty) await actions.save();
+      if (autosave && editor?.dirty) await editor.save();
+      else if (autosave && actions.dirty) await actions.save();
       const cached = content === undefined ? modelCache.current.get(file) : undefined;
       if (cached) actions.restore(cached);
-      else await actions.openFile(file, content);
+      else {
+        await actions.openFile(file, content);
+        await readPlace();
+      }
     } catch (err) {
-      fail(err as Error);
+      fail(err as Error, "Couldn't open the model");
     }
   };
 
-  /** Close tabs (the kit's rules: the right neighbour shows, else the left). A model always shows, so
-   *  closing every tab keeps the shown one; the shown one is saved by openDocument before it goes. */
-  const closeDocuments = async (paths: string[]) => {
+  /** Close tabs (the kit's rules: the right neighbour shows, else the left; none left: no model). The
+   *  shown one is saved by openDocument before it goes, unless `autosave` is off (Don't save). */
+  const closeDocuments = async (paths: string[], autosave = true) => {
     const current = model?.file ?? null;
-    const closing = paths.length >= docs.length ? paths.filter((p) => p !== current) : paths;
-    if (!closing.length) return;
-    const after = afterClose(orderTabs(docs.map((d) => d.file), pinned), current, closing);
-    setDocs((list) => list.filter((d) => !closing.includes(d.file)));
-    setPinned((now) => new Set([...now].filter((f) => !closing.includes(f))));
-    if (after.current && after.current !== current) await openDocument(after.current);
+    const after = afterClose(orderTabs(docs.map((d) => d.file), pinned), current, paths);
+    setDocs((list) => list.filter((d) => !paths.includes(d.file)));
+    setPinned((now) => new Set([...now].filter((f) => !paths.includes(f))));
+    for (const f of paths) if (!autosave) modelCache.current.delete(f);
+    if (after.current && after.current !== current) await openDocument(after.current, undefined, autosave);
+    else if (!after.current) actions.close();
+  };
+
+  /** Unsaved changes ask first (Save, Don't save, Cancel) before `then` lets the shown model go. */
+  const guard = (closing: string | undefined, then: (autosave: boolean) => Promise<void> | void) =>
+    model && fileDirty ? setUnsaved({ closing, then }) : void then(true);
+  const closing = place?.kind === "hub" ? "the hub" : "the folder";
+  /** Open folder, Connect, Close: the server switches; the model in the old workspace goes (asked first). */
+  const switchPlace = (go: () => Promise<Place | { kind: null }>) => guard(closing, async () => {
+    try {
+      const w = await go();
+      const next = w.kind ? w as Place : null;
+      applyPlace(next);
+      if (model?.file && !(next && inside(model.file, next.root))) actions.close();
+    } catch (e) {
+      fail(e as Error, "Couldn't open it");
+      void readRecent();
+    }
+  });
+  const openFolder = (path: string) => switchPlace(() => omc.op("open_folder", { path }));
+  const connect = (id: string) => switchPlace(() => omc.op("connect", { hub: id }));
+  const closePlace = () => switchPlace(() => omc.op("close_workspace"));
+  const pickFolder = () => {
+    const sh = shell();
+    if (!sh) return setAsk("folder");
+    void sh.pickFolder("Open folder").then((p) => p && openFolder(p));
+  };
+  /** A local .mo: the system's dialog in a Paperboat window, a typed path in a browser. */
+  const pickLocal = () => {
+    const sh = shell();
+    if (!sh) return setAsk("file");
+    void sh.pickFile(["mo"], "Open a model").then((p) => p && void openDocument(p));
+  };
+  /** File › Open file…: our picker in a hub; outside one, ask (a local file or a hub) when Malachite is here. */
+  const openFile = () => (place?.kind === "hub" ? setAsk("pickOpen") : malachite ? (setAsk("open"), void readHubs()) : pickLocal());
+  const openConnect = () => (setAsk("connect"), void readHubs());
+  /** Save as: our picker in a hub; the system's dialog in a Paperboat window; a download in a browser. Then
+   *  the new file is the one open (its workspace, when it lies outside). */
+  const saveAsTo = async (path: string) => {
+    const old = model?.file;
+    try {
+      await actions.saveAs(path);
+      if (old && old !== path) {
+        modelCache.current.delete(old);
+        setDocs((list) => list.filter((d) => d.file !== old));
+      }
+      await actions.openFile(path);
+      await readPlace();
+    } catch (e) {
+      fail(e as Error, "Couldn't save");
+    }
+  };
+  const saveAs = () => {
+    if (!model) return;
+    const name = model.file ? baseName(model.file) : `${model.name}.mo`;
+    if (place?.kind === "hub") return setAsk("pickSave");
+    const sh = shell();
+    if (sh) return void sh.pickSave(name, ["mo"], "Save the model as").then((p) => { if (p) void saveAsTo(p); });
+    void actions.source().then((text) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([`${text}\n`], { type: "text/plain" }));
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }, (e: Error) => fail(e, "Couldn't save"));
+  };
+  const newHub = () =>
+    setPromptModal({
+      title: "New hub",
+      label: "Name",
+      placeholder: "e.g. tank-lab",
+      confirmLabel: "Make",
+      onConfirm: (name) => omc.op<AppHub[] | null>("hub_new", { name }).then((list) => {
+        setHubs(Array.isArray(list) ? list : null);
+        const made = Array.isArray(list) ? list.find((h) => h.name === name) : undefined;
+        if (made) connect(made.id);
+      }, (e) => fail(e, "Couldn't make the hub")),
+    });
+  const openInMalachite = () => place && void omc.op("hub_open_malachite", { root: place.root }).catch((e) => fail(e, "Couldn't open Malachite"));
+  /** A recent entry: a folder opens, a hub connects, a file opens (in its folder or hub). A folder that is
+   *  gone leaves the list. */
+  const openRecent = (e: RecentEntry) => {
+    if (e.kind === "file") return void openDocument(e.path);
+    const go = e.kind === "hub" && e.hub ? () => omc.op<Place>("connect", { hub: e.hub }) : () => omc.op<Place>("open_folder", { path: e.path });
+    switchPlace(() => go().catch(async (err: Error) => {
+      if (!/^no hub/.test(err.message)) await omc.op("recent_forget", { kind: e.kind, path: e.path }).catch(() => undefined);
+      throw err;
+    }));
+  };
+  const clearRecent = () => void omc.op("recent_forget").then(() => setRecent([]), (e: Error) => fail(e));
+  const recentItems = recentMenu(recentFor({ version: 1, recent }, "articula", { hubs: malachite }), openRecent, clearRecent);
+  /** Our picker's preview of a hub file: when it changed, its size (the server's `at`, `size`). */
+  const describeFile = (e: FileEntry) => {
+    const { at, size } = e as FileEntry & { at?: number; size?: number };
+    return <dl className="open-facts">
+      {at !== undefined && <><dt>changed</dt><dd>{when(at, Date.now() / 1000)}</dd></>}
+      {size !== undefined && <><dt>size</dt><dd>{size < 1024 ? `${size} B` : `${(size / 1024).toFixed(1)} KB`}</dd></>}
+    </dl>;
+  };
+  /** A .mo dropped on the Start page: its text lands in Articula's own folder (a page gets no real path). */
+  const onDrop = (e: DragEvent) => {
+    const f = [...e.dataTransfer.files].find((one) => one.name.endsWith(".mo"));
+    if (!f) return void show({ title: "Drop a .mo file", detail: "a folder opens with Open folder… (Ctrl K Ctrl O)", state: "failed" });
+    void f.text().then((text) => openDocument(f.name, text));
   };
   const shownDocs = orderTabs(docs.map((d) => d.file), pinned).map((f) => docs.find((d) => d.file === f)!);
   const docMenu = (file: string) => tabMenu(file, { tabs: shownDocs.map((d) => d.file), pinned, dirty: (f) => f === model?.file && (actions.dirty || textDirty) }, {
@@ -563,24 +669,6 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     }
   };
 
-  const handleFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const content = String(reader.result ?? "");
-      // Import into the workspace being authored, not the server's cwd: the package tree stays.
-      const target = workspace?.root ? `${workspace.root}/${file.name}` : file.name;
-      try {
-        await openDocument(target, content);
-      } catch (err) {
-        fail(err as Error);
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
-  };
-
   const openConsole = (tab: ConsoleTab) => {
     setConsoleTab(tab);
     setConsoleShown(true);
@@ -632,166 +720,129 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     return part?.class ?? "";
   };
 
-  const commands = useMemo<Command[]>(
-    () => [
-      // File menu (Issue #11)
-      {
-        id: "file.new",
-        label: "New Model",
-        menu: "file",
-        group: "model",
-        shortcut: "Ctrl+N",
-        chord: { key: "n", ctrl: true },
-        run: () =>
-          setPromptModal({
-            title: "New Model",
-            label: "Model Name",
-            value: "NewModel.mo",
-            confirmLabel: "Create",
-            onConfirm: async (name) => {
-              if (editorHandle.current?.dirty) await editorHandle.current.save();
-              else if (actions.dirty) await actions.save();
-              const target = workspace?.root ? `${workspace.root}/${name.endsWith(".mo") ? name : `${name}.mo`}` : undefined;
-              await actions.newModel(name, target);
-            },
-          }),
-      },
-      {
-        id: "file.new-class",
-        label: "New Class…",
-        menu: "file",
-        group: "model",
-        shortcut: "Ctrl+Shift+N",
-        chord: { key: "n", ctrl: true, shift: true },
-        run: () => openNewClass(),
-      },
-      {
-        id: "file.new-package",
-        label: "New Package…",
-        menu: "file",
-        group: "model",
-        run: () => newPackage(),
-      },
-      {
-        id: "file.open",
-        label: "Open…",
-        menu: "file",
-        group: "model",
-        shortcut: "Ctrl+O",
-        chord: { key: "o", ctrl: true },
-        run: openPicker,
-      },
-      {
-        id: "file.open-path",
-        label: "Open from Path…",
-        menu: "file",
-        group: "model",
-        run: () =>
-          setPromptModal({
-            title: "Open Modelica File",
-            label: "File Path",
-            placeholder: "e.g. models/MyModel.mo",
-            confirmLabel: "Open",
-            onConfirm: (path) => openDocument(path),
-          }),
-      },
-      {
-        id: "file.save",
-        label: "Save",
-        menu: "file",
-        group: "save",
-        shortcut: "Ctrl+S",
-        chord: { key: "s", ctrl: true },
-        enabled: Boolean(model),
-        run: () => void saveCurrent().catch((e) => fail(e, "Couldn't save")),
-      },
-      {
-        id: "file.save-as",
-        label: "Save As…",
-        menu: "file",
-        group: "save",
-        shortcut: "Ctrl+Shift+S",
-        chord: { key: "s", ctrl: true, shift: true },
-        enabled: Boolean(model),
-        run: () => (hubs.length ? (setPicker("save"), void readHubs()) : savePrompt()),
-      },
-      {
-        id: "file.load-library",
-        label: "Load a library…",
-        menu: "model",
-        group: "library",
-        run: () => setLibraryModalOpen(true),
-      },
-      {
-        id: "file.export",
-        label: "Export station…",
-        menu: "model",
-        group: "export",
-        shortcut: "Ctrl+E",
-        chord: { key: "e", ctrl: true },
-        enabled: exportReady,
-        why: exportWhy || undefined,
-        run: () => void handleExportStation(),
-      },
+  // every render: the File menu's handlers close over the workspace and the open model
+  const commands: Command[] = [
+    // File: the same items in the same order in every app (the kit's fileMenu); the model's own below
+    ...fileMenu({
+      noun: "model", workspace: place ?? null, file: !!model, hubs: malachite, recent: recentItems,
+      onNew: () => setPromptModal({
+        title: "New model",
+        label: "Model name",
+        value: "NewModel",
+        confirmLabel: "Create",
+        onConfirm: async (name) => {
+          if (editorHandle.current?.dirty) await editorHandle.current.save();
+          else if (actions.dirty) await actions.save();
+          await actions.newModel(name.endsWith(".mo") ? name : `${name}.mo`).catch((e) => fail(e, "Couldn't make the model"));
+          await readPlace();
+          refreshWorkspace();
+        },
+      }),
+      onOpenFile: openFile,
+      onOpenFolder: pickFolder,
+      onConnect: openConnect,
+      onSave: () => void saveCurrent().catch((e) => fail(e, "Couldn't save")),
+      onSaveAs: saveAs,
+      onCloseFile: () => model?.file && guard(undefined, (autosave) => closeDocuments([model.file!], autosave)),
+      onCloseWorkspace: closePlace,
+      // ponytail: Articula has no Settings window; its settings are the editor's (the Text view's gear) and the theme
+      onSettings: () => (setStageView("text"), requestAnimationFrame(() => document.querySelector<HTMLElement>(".stage-view .settings-key")?.click())),
+    }).map((c) => (c.id === "file.settings" && !model ? { ...c, enabled: false, why: "open a model: its Text view has the editor settings" } : c)),
+    {
+      id: "file.new-class",
+      label: "New class…",
+      menu: "model",
+      group: "new",
+      shortcut: "Ctrl Shift N",
+      chord: { key: "n", ctrl: true, shift: true },
+      enabled: !!place,
+      why: "open a folder first",
+      run: () => openNewClass(),
+    },
+    {
+      id: "file.new-package",
+      label: "New package…",
+      menu: "model",
+      group: "new",
+      enabled: !!place,
+      why: "open a folder first",
+      run: () => newPackage(),
+    },
+    {
+      id: "file.load-library",
+      label: "Load a library…",
+      menu: "model",
+      group: "library",
+      run: () => setLibraryModalOpen(true),
+    },
+    {
+      id: "file.export",
+      label: "Export station…",
+      menu: "model",
+      group: "export",
+      shortcut: "Ctrl+E",
+      chord: { key: "e", ctrl: true },
+      enabled: exportReady,
+      why: exportWhy || undefined,
+      run: () => void handleExportStation(),
+    },
 
-      // Edit menu
-      { id: "undo", label: "Undo", menu: "edit", group: "history", shortcut: "Ctrl+Z", enabled: actions.canUndo, run: actions.undo },
-      { id: "redo", label: "Redo", menu: "edit", group: "history", shortcut: "Ctrl+Shift+Z", enabled: actions.canRedo, run: actions.redo },
+    // Edit menu
+    { id: "undo", label: "Undo", menu: "edit", group: "history", shortcut: "Ctrl+Z", enabled: actions.canUndo, run: actions.undo },
+    { id: "redo", label: "Redo", menu: "edit", group: "history", shortcut: "Ctrl+Shift+Z", enabled: actions.canRedo, run: actions.redo },
 
-      // Model menu (#68)
-      {
-        id: "model.check",
-        label: "Check",
-        menu: "model",
-        group: "check",
-        shortcut: "Ctrl+Shift+C",
-        chord: { key: "c", ctrl: true, shift: true },
-        enabled: Boolean(model),
-        run: () => void runCheck(),
-      },
-      {
-        id: "model.flat",
-        label: "Show the flat model",
-        menu: "model",
-        group: "check",
-        shortcut: "Ctrl+Shift+F",
-        chord: { key: "f", ctrl: true, shift: true },
-        enabled: Boolean(model),
-        run: () => (setView("flat"), setSide(() => true)),
-      },
-      {
-        id: "model.messages",
-        label: "Messages",
-        menu: "model",
-        group: "show",
-        meta: messages.length ? String(messages.length) : undefined,
-        checked: consoleShown && consoleTab === "messages",
-        enabled: Boolean(model),
-        run: () => openConsole("messages"),
-      },
+    // Model menu (#68)
+    {
+      id: "model.check",
+      label: "Check",
+      menu: "model",
+      group: "check",
+      shortcut: "Ctrl+Shift+C",
+      chord: { key: "c", ctrl: true, shift: true },
+      enabled: Boolean(model),
+      run: () => void runCheck(),
+    },
+    {
+      id: "model.flat",
+      label: "Show the flat model",
+      menu: "model",
+      group: "check",
+      shortcut: "Ctrl+Shift+F",
+      chord: { key: "f", ctrl: true, shift: true },
+      enabled: Boolean(model),
+      run: () => (setView("flat"), setSide(() => true)),
+    },
+    {
+      id: "model.messages",
+      label: "Messages",
+      menu: "model",
+      group: "show",
+      meta: messages.length ? String(messages.length) : undefined,
+      checked: consoleShown && consoleTab === "messages",
+      enabled: Boolean(model),
+      run: () => openConsole("messages"),
+    },
 
-      // Model menu: Simulate and its settings (Check and the flat model are above)
-      { id: "simulate", label: "Simulate", menu: "model", group: "simulate", shortcut: "Ctrl+R", chord: { key: "r", ctrl: true }, enabled: !!model && !running, why: running ? "a simulation is running" : "open a model first", run: () => (setSide(() => true), requestAnimationFrame(() => window.dispatchEvent(new Event("articula:simulate")))) },
-      { id: "cancel-simulate", label: "Cancel simulation", menu: "model", group: "simulate", enabled: running, why: "no simulation is running", run: () => window.dispatchEvent(new Event("articula:cancel")) },
-      { id: "solver", label: "Solver settings…", menu: "model", group: "solver", run: () => (setSide(() => true), window.dispatchEvent(new Event("articula:solver"))) },
-      { id: "libraries", label: "Libraries…", menu: "model", group: "libraries", run: () => setPackagesOpen(true) },
+    // Model menu: Simulate and its settings (Check and the flat model are above)
+    { id: "simulate", label: "Simulate", menu: "model", group: "simulate", shortcut: "Ctrl+R", chord: { key: "r", ctrl: true }, enabled: !!model && !running, why: running ? "a simulation is running" : "open a model first", run: () => (setSide(() => true), requestAnimationFrame(() => window.dispatchEvent(new Event("articula:simulate")))) },
+    { id: "cancel-simulate", label: "Cancel simulation", menu: "model", group: "simulate", enabled: running, why: "no simulation is running", run: () => window.dispatchEvent(new Event("articula:cancel")) },
+    { id: "solver", label: "Solver settings…", menu: "model", group: "solver", run: () => (setSide(() => true), window.dispatchEvent(new Event("articula:solver"))) },
+    { id: "libraries", label: "Libraries…", menu: "model", group: "libraries", run: () => setPackagesOpen(true) },
 
-      // View menu
-      { id: "view.search", label: "Command search…", menu: "view", group: "search", shortcut: "Ctrl+K", chord: SEARCH_CHORD, quiet: true, run: () => setSearchOpen(true) },
-      { id: "rail", label: "Files and library", menu: "view", group: "panes", shortcut: "Ctrl+B", chord: { key: "b", ctrl: true }, checked: !railHidden, run: () => toggle("l") },
-      { id: "side", label: "Source and Simulate", menu: "view", group: "panes", shortcut: "Ctrl+Alt+B", chord: { key: "b", ctrl: true, alt: true }, checked: side, run: () => toggle("r") },
-      { id: "console", label: "Console", menu: "view", group: "panes", shortcut: "Ctrl+J", chord: { key: "j", ctrl: true }, checked: consoleShown, run: toggleConsole },
-      ...stageOptions.map((option): Command => ({ id: `stage-${option.value}`, label: option.label, menu: "view", group: "stage", checked: stageView === option.value, run: () => setStageView(option.value) })),
-      { id: "flat", label: "Flat model", menu: "view", group: "source", checked: view === "flat", run: () => (setView("flat"), setSide(() => true)) },
-      { id: "cpp", label: "Causal ODE (C++)", menu: "view", group: "source", checked: view === "cpp", run: () => (setView("cpp"), setSide(() => true)) },
-      ...(["code", "split", "scopes"] as Focus[]).map((f): Command => ({ id: `focus-${f}`, label: f === "split" ? "Source and plots" : f === "code" ? "Source only" : "Plots only", menu: "view", group: "focus", checked: focus === f, run: () => (setFocus(f), setSide(() => true)) })),
-      { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
-      ...THEMES.map((t): Command => ({ id: `theme-${t}`, label: t[0].toUpperCase() + t.slice(1), menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
-      { ...helpCommand(() => setHelpQuery(helpContext())), menu: "help" },
-      { id: "about", label: "About Articula", menu: "help", group: "about", run: () => setAboutOpen(true) },
-    ],
-    [actions.canUndo, running, hidden, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, railHidden, view, stageView, stageOptions, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole, saveCurrent, exportReady, exportWhy, hubs],
-  );
+    // View menu
+    { id: "view.search", label: "Command search…", menu: "view", group: "search", shortcut: "Ctrl+K", chord: SEARCH_CHORD, quiet: true, run: () => setSearchOpen(true) },
+    { id: "rail", label: "Files and library", menu: "view", group: "panes", shortcut: "Ctrl+B", chord: { key: "b", ctrl: true }, checked: !railHidden, run: () => toggle("l") },
+    { id: "side", label: "Source and Simulate", menu: "view", group: "panes", shortcut: "Ctrl+Alt+B", chord: { key: "b", ctrl: true, alt: true }, checked: side, run: () => toggle("r") },
+    { id: "console", label: "Console", menu: "view", group: "panes", shortcut: "Ctrl+J", chord: { key: "j", ctrl: true }, checked: consoleShown, run: toggleConsole },
+    ...stageOptions.map((option): Command => ({ id: `stage-${option.value}`, label: option.label, menu: "view", group: "stage", checked: stageView === option.value, run: () => setStageView(option.value) })),
+    { id: "flat", label: "Flat model", menu: "view", group: "source", checked: view === "flat", run: () => (setView("flat"), setSide(() => true)) },
+    { id: "cpp", label: "Causal ODE (C++)", menu: "view", group: "source", checked: view === "cpp", run: () => (setView("cpp"), setSide(() => true)) },
+    ...(["code", "split", "scopes"] as Focus[]).map((f): Command => ({ id: `focus-${f}`, label: f === "split" ? "Source and plots" : f === "code" ? "Source only" : "Plots only", menu: "view", group: "focus", checked: focus === f, run: () => (setFocus(f), setSide(() => true)) })),
+    { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
+    ...THEMES.map((t): Command => ({ id: `theme-${t}`, label: t[0].toUpperCase() + t.slice(1), menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
+    { ...helpCommand(() => setHelpQuery(helpContext())), menu: "help" },
+    { id: "about", label: "About Articula", menu: "help", group: "about", run: () => setAboutOpen(true) },
+  ];
   useShortcuts(commands);
   const helpProvider = useMemo(() => omHelp(omc), [omc]);
 
@@ -808,16 +859,15 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         <header className="bar">
           <span className="lk"><AppMark app="articula" size={26} idle={!live} label="Articula" /><span className="wm">Articula</span></span>
           <MenuBar commands={commands} menus={MENUS} />
-          {model && hub && (
-            <HubSelector hub={hub} hubs={hubs} app="Articula" onSwitch={() => setPicker("open")} onNew={newHub}
-              onOpenInMalachite={() => void omc.op("hub_open_malachite", { root: hub.root }).catch((e) => fail(e, "Couldn't open Malachite"))} />
+          {place && (
+            <WorkspaceWell workspace={place} home={home} recent={recentItems} hubs={hubs ?? []} onOpenFolder={pickFolder} onConnect={openConnect}
+              onClose={closePlace} onSwitchHub={connect} onNewHub={newHub} onOpenInMalachite={openInMalachite} onUseFolder={pickFolder} />
           )}
-          {model && <span className="proj" title={model.file}><u>{hub ? modelFile.slice(hub.root.length + 1) : model.name}</u>{fileDirty && <i className="dirty" title="Not saved" />}</span>}
           <span className="bend">
             {model && <Key size="sm" kind="quiet" icon="check" disabled={checking} onClick={() => void runCheck()} title="Check the model (Ctrl Shift C)">{checking ? "Checking…" : "Check"}</Key>}
             {running
               ? <Key busy onClick={() => window.dispatchEvent(new Event("articula:cancel"))} title="Cancel the simulation">Cancel</Key>
-              : <Key kind="primary" icon="play" disabled={!model} onClick={() => (toggle("r", false), requestAnimationFrame(() => window.dispatchEvent(new Event("articula:simulate"))))} title="Simulate (Ctrl R)">Simulate</Key>}
+              : model && <Key kind="primary" icon="play" onClick={() => (toggle("r", false), requestAnimationFrame(() => window.dispatchEvent(new Event("articula:simulate"))))} title="Simulate (Ctrl R)">Simulate</Key>}
             <RuntimesKey scope="this workspace" runtimes={[{
               id: "omc", name: `OpenModelica${omcVersion ? ` ${omcVersion}` : ""}`, lang: "omc", via: status.mode,
               state: running ? "busy" : status.state === "checking" ? "starting" : status.state === "failed" ? "failed" : "idle",
@@ -827,9 +877,22 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             <PanelsKey panels={PANELS.map((p) => ({ id: p.side, label: p.name, keys: p.keys, shown: !hidden[p.side] }))} layout={LAYOUT} onToggle={(id) => toggle(id as Side)} />
             <span className="lsep" />
             <ThemePicker theme={theme} onChange={setTheme} />
+            <WindowKeys />
           </span>
         </header>
-        {api && model ? (
+        {!actions.ready || place === undefined ? (
+          <Opening status={status} stage={stage} error={error} onRetry={() => location.reload()} />
+        ) : !place ? (
+          <main className="ws">
+            <div className="mid bay start-bay">
+              <div className="panel start-card">
+                <Start app="Articula" noun="model" nouns="models" hubs={malachite} recent={recent} home={home}
+                  onOpenFolder={pickFolder} onOpenFile={openFile} onNew={() => commands.find((c) => c.id === "file.new")?.run()} onConnect={openConnect}
+                  onRecent={openRecent} onDrop={onDrop} />
+              </div>
+            </div>
+          </main>
+        ) : (
           <main className="ws">
             <Rail
               tab={rail}
@@ -838,7 +901,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               onToggle={(h) => toggle("l", h)}
               workspace={workspace}
               git={git}
-              active={model.file}
+              active={model?.file}
               onOpen={(file) => void openDocument(file)}
               onNewClass={openNewClass}
               onNewPackage={newPackage}
@@ -851,8 +914,15 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                 say(`Copied ${entry.path}`);
               }}
             >
-              <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model)).then((name) => api.select([name]))} />
+              <Library omc={omc} model={model?.name ?? ""} onPlace={(cls) => model && api && void actions.place(cls, freeSpot(model)).then((name) => api.select([name]))} />
             </Rail>
+            {!api || !model ? (
+              <div className="mid bay empty-bay">
+                <main className="panel stage" aria-label="No model open">
+                  <p className="stage-empty"><span>No model open: pick one in Files, or New model (Ctrl N).</span></p>
+                </main>
+              </div>
+            ) : <>
             <Gutter label="Simulate width" size={hidden.r ? 38 : simWidth} defaultSize={420} min={320} otherMin={420}
               onSize={(w) => (setSimWidth(w), hidden.r && toggle("r", false))} onHidden={() => toggle("r", true)}>
             <div className="mid bay">
@@ -860,7 +930,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                 <EditorTabs label="Open models" current={model.file} menu={docMenu}
                   tabs={shownDocs.map((d) => ({ id: d.file, label: d.name, icon: <span className="ck ck-model">M</span>, dirty: d.file === model.file && (actions.dirty || textDirty), pinned: pinned.has(d.file), closable: shownDocs.length > 1 }))}
                   onShow={(f) => void openDocument(f)} onClose={(f) => void closeDocuments([f])}>
-                  <Key size="sm" kind="quiet" round icon="add" label="Open a .mo file" onClick={openPicker} />
+                  <Key size="sm" kind="quiet" round icon="add" label="Open a .mo file" onClick={openFile} />
                   <Segmented<Stage> label="View" size="sm" value={stageView} onChange={setStageView} options={stageOptions} />
                 </EditorTabs>
                 <div className="stage-view">
@@ -930,19 +1000,10 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             </Gutter>
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
             <InterfaceSheet open={sheet} onOpen={() => setSheet(true)} onClose={() => setSheet(false)} canExport={canExport} />
+            </>}
             {newClassOpen && <NewClassSheet workspace={workspace} model={model} defaultWithin={newClassWithin} onClose={() => setNewClassOpen(false)} onCreate={createNewClass} />}
           </main>
-        ) : (
-          <Opening status={status} stage={stage} error={error} onRetry={() => location.reload()} />
         )}
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".mo,.moe"
-          style={{ display: "none" }}
-          onChange={handleFileInputChange}
-        />
 
         {confirmModal && (
           <ConfirmModal
@@ -954,14 +1015,25 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           />
         )}
 
-        {picker === "open" && (
-          <OpenFile what="a model" types={["mo"]} hubs={hubs} list={hubFiles} onComputer={() => fileInputRef.current?.click()}
-            onClose={() => setPicker(null)} onOpen={(h, path) => (setPicker(null), void openFromHub(`${(h as AppHub).root}/${path}`))} />
+        {ask === "open" && <AskOpen what="a model" types={["mo"]} hubs={hubs?.length ?? 0} onLocal={() => (setAsk(null), pickLocal())} onConnect={openConnect} onClose={() => setAsk(null)} />}
+        {ask === "connect" && hubs && <ConnectHub app="Articula" hubs={hubs} onConnect={(id) => (setAsk(null), connect(id))} onNew={() => (setAsk(null), newHub())} onClose={() => setAsk(null)} />}
+        {ask === "pickOpen" && place && hub && (
+          <OpenFile what="a model" types={["mo"]} kinds="Models" hub={hub} list={() => omc.op<FileEntry[]>("hub_files", { root: place.root })} describe={describeFile}
+            onClose={() => setAsk(null)} onOpen={(path) => (setAsk(null), void openDocument(`${place.root}/${path}`))} />
         )}
-        {picker === "save" && (
-          <SaveFile what="the model" types={["mo"]} hubs={hubs} list={hubFiles} name={modelFile ? modelFile.slice(modelFile.lastIndexOf("/") + 1) : `${model?.name}.mo`}
-            onComputer={savePrompt} onClose={() => setPicker(null)}
-            onSave={(h, path) => (setPicker(null), void actions.saveAs(`${(h as AppHub).root}/${path}`).catch((e) => fail(e, "Couldn't save")))} />
+        {ask === "pickSave" && place && hub && (
+          <SaveFile what="the model" types={["mo"]} hub={hub} list={() => omc.op<FileEntry[]>("hub_files", { root: place.root })} name={modelFile ? baseName(modelFile) : `${model?.name}.mo`}
+            onClose={() => setAsk(null)} onSave={(path) => (setAsk(null), void saveAsTo(`${place.root}/${path}`))} />
+        )}
+        {(ask === "folder" || ask === "file") && (
+          <TypedPath title={ask === "folder" ? "Open folder" : "Open a local file"} what={ask} initial={place && ask === "folder" ? "" : place ? `${place.root}/` : ""}
+            onClose={() => setAsk(null)} onOpen={(p) => (setAsk(null), ask === "folder" ? openFolder(p) : void openDocument(p))} />
+        )}
+        {unsaved && model && (
+          <Unsaved name={modelFile ? baseName(modelFile) : model.name} closing={unsaved.closing}
+            onSave={() => { const go = unsaved.then; setUnsaved(null); void saveCurrent().then(() => go(true), (e) => fail(e, "Couldn't save")); }}
+            onDiscard={() => { const go = unsaved.then; setUnsaved(null); void go(false); }}
+            onClose={() => setUnsaved(null)} />
         )}
         {promptModal && (
           <PromptModal
@@ -1000,7 +1072,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         {helpQuery !== null && <HelpWindow app="Articula" provider={helpProvider} commands={commands} query={helpQuery} onClose={() => setHelpQuery(null)} />}
 
         <Toasts toasts={notes.toasts} onDismiss={notes.dismiss} />
-        {searchOpen && <Search items={searchItems} scopes={["All", "Commands", "Files"]} placeholder={`Search ${workspace ? workspaceName(workspace) : "the workspace"}, or run a command`} onClose={() => setSearchOpen(false)} />}
+        {searchOpen && <Search items={searchItems} scopes={["All", "Commands", "Files"]} placeholder={`Search ${place ? place.name : "the commands"}, or run a command`} onClose={() => setSearchOpen(false)} />}
 
       </div>
     </StudioContext.Provider>

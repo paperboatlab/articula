@@ -17,7 +17,7 @@ export function NewClassSheet({
   onCreate,
 }: {
   workspace: Workspace | null;
-  model: StudioModel;
+  model?: StudioModel;
   /** The package the rail or menu asked for; defaults to the open model's package. */
   defaultWithin?: string;
   onClose: () => void;
@@ -27,7 +27,7 @@ export function NewClassSheet({
   const [name, setName] = useState("");
   const [kind, setKind] = useState<ClassKind>("model");
   const [within, setWithin] = useState(() => {
-    const wanted = defaultWithin ?? modelWithin(model);
+    const wanted = defaultWithin ?? (model ? modelWithin(model) : "");
     return options.some((o) => o.value === wanted) ? wanted : "";
   });
   const [base, setBase] = useState("");

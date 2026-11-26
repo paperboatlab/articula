@@ -402,6 +402,36 @@ TEST_CASE("Icon(graphics) quantiser maps primitives, drops Bitmap/DynamicSelect,
   CHECK_FALSE(sq.contains("h"));
 }
 
+TEST_CASE("icon_art keeps the graphics whole: gradients, angles, text, a visible expression", "[modelica]") {
+  const auto anno = mo::parse_value(
+      "{-100.0,-100.0,100.0,100.0,true,-,-,,{"
+      "Rectangle(true,{0,0},0,{64,64,64},{192,192,192},LinePattern.Solid,FillPattern.HorizontalCylinder,0.25,"
+      "BorderPattern.None,{{-100,-10},{-50,10}},0),"
+      "Line(useHeatPort,{0,0},0,{{0,-100},{0,-30}},{127,0,0},LinePattern.Dot,0.25,{Arrow.None,Arrow.Filled},3,Smooth.Bezier),"
+      "Ellipse(true,{0,0},0,{160,160,160},{0,0,0},LinePattern.Solid,FillPattern.None,0.1,{{-40,40},{40,-40}},30.0,210.0,EllipseClosure.None),"
+      "Bitmap(extent={{-10,-10},{10,10}}, fileName=\"modelica://Pkg/img.png\"),"
+      "Text(true,{0,0},0,{0,0,0},{0,0,0},LinePattern.Solid,FillPattern.None,0.25,{{-150,-40},{150,-80}},\"R=%R\",0.0,{-1,-1,-1},\"\",{},TextAlignment.Left)"
+      "}}");
+  const json art = mo::icon_art({anno});
+  REQUIRE(art.size() == 1);
+  CHECK(art[0]["extent"] == json({-100.0, -100.0, 100.0, 100.0}));
+  const json& g = art[0]["g"];
+  REQUIRE(g.size() == 4);  // the Bitmap is left out
+  CHECK(g[0]["t"] == "Rectangle");
+  CHECK(g[0]["fillPattern"] == "HorizontalCylinder");
+  CHECK(g[0]["fillColor"] == json({192, 192, 192}));
+  CHECK(g[0]["extent"] == json({-100.0, -10.0, -50.0, 10.0}));
+  CHECK(g[1]["visible"] == "useHeatPort");
+  CHECK(g[1]["smooth"] == "Bezier");
+  CHECK(g[1]["pattern"] == "Dot");
+  CHECK(g[1]["arrow"] == json({"None", "Filled"}));
+  CHECK(g[2]["startAngle"] == 30.0);
+  CHECK(g[2]["closure"] == "None");
+  CHECK(g[3]["text"] == "R=%R");
+  CHECK(g[3]["textColor"].is_null());
+  CHECK(g[3]["align"] == "Left");
+}
+
 TEST_CASE("live omc importer matches MSL goldens and resolves array, if, and fallback connectors", "[modelica][omc]") {
   if (!have_omc()) SKIP("omc not installed");
   mo::Omc omc(in_tmp());

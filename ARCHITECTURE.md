@@ -39,7 +39,8 @@ flowchart LR
   `open_window` for a model outside the workspace, through `paperboat app open`); `workspace_of` picks the lease's project (a folder, or the folder holding
   a file's top package).
 - `server/src/icon.cpp`, `connectors.cpp`, `seticon.cpp`: the importer (`Icon(graphics)` → the kit's
-  `IconDef`, connectors and their domains) and its inverse; `generate.cpp`: the station generator
+  `IconDef`, connectors and their domains; and `icon_art`, the same graphics kept whole, which the `icon`
+  op returns as `art`) and its inverse; `generate.cpp`: the station generator
   (targets the legacy engine until Simplicial is rebuilt).
 - `server/src/main.cpp`: the `articula-server` binary: the server, and `check`, `generate`, `icon`.
 - `src/App.tsx`: the window (REBRAND: the kit's `.win > .bar`, the frame (the bar, Files/Library and Simulate one surface, the stage and the console in the kit's `.bay`), the kit's `EditorTabs` for the
@@ -48,7 +49,8 @@ flowchart LR
   `menus.ts`).
 - `src/store/`: `useStudioStore`, the `StudioApi` the views share (omc is the only source of truth: an
   edit is omc calls, then the model is read again); `src/omc/omc.ts` the `articula/0` client.
-- `src/canvas/` the diagram (the kit's canvas and its `CanvasTools`), `src/icon/` the icon editor, `src/library/` the
+- `src/canvas/` the diagram (the kit's canvas and its `CanvasTools`), `src/icon/` the icon editor and `art.tsx`
+  (a library class's `art` drawn whole and restyled by rule, in the kit plate's place), `src/library/` the
   library browser, `src/split/` the flat model and the generated C++, `src/simulate/` setup, plot and the
   variables browser, `src/viewport3d/` MultiBody shapes, `src/sheet/`, `src/popover/`, `src/dock/`.
 
@@ -58,4 +60,6 @@ flowchart LR
 - omc sees only the workspace (writable: it saves `.mo` files), its work folder and the package volume.
 - An expression from the page passes `allowed()` (one allow-listed call; no `system`, no `runScript`).
 - The page never talks to omc or the daemon itself.
+- A library icon is drawn from its own annotation (`art`), restyled by rule, never redrawn by hand; the
+  token `IconDef` sizes the plate, places the ports, and is what the icon editor edits.
 - Hubs are Malachite's: Articula reads them only through `paperboat hub list --json`; no Malachite, no hubs.

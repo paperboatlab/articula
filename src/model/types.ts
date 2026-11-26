@@ -3,6 +3,7 @@
 import { createContext, useContext } from "react";
 import { type Connectors, type IconDef, type IconPort, type ParamDef } from "@paperboatlab/ui/canvas";
 import type { OmcClient, OmcStatus } from "../omc/omc.ts";
+import type { ArtLayer } from "../icon/art.tsx";
 
 /** Diagram-layer placement, on the 20px canvas grid. */
 export type Placement = { x: number; y: number; rotation: 0 | 90 | 180 | 270; mirror?: boolean };
@@ -14,6 +15,7 @@ export type ComponentInst = {
   defaults?: Record<string, string>; // the class's numeric parameters when unset: { C: "1" }
   placement: Placement;
   icon?: IconDef; // from the Wave 2 importer
+  art?: ArtLayer[]; // the class's own Icon graphics, drawn by IconArt over the plate
   ports: IconPort[];
 };
 

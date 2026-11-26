@@ -33,7 +33,7 @@
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.15",
     "@lezer/highlight": "^1.2.5",
-    "@paperboatlab/ui": "github:paperboatlab/paperboat-ui#6c6b01a83e135d7d2a4d71d35ce0996cf55821dd",
+    "@paperboatlab/ui": "github:paperboatlab/paperboat-ui#229bd9dbc9660a7ed4de816e09c373835f34e034",
     "@types/node": "^22.19.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

@@ -3,9 +3,11 @@
 
 import { type ConnectorDef, type Connectors, type IconDef, type IconPort } from "@paperboatlab/ui/canvas";
 import type { OmcCalls } from "../omc/omc.ts";
+import type { ArtLayer } from "../icon/art.tsx";
 
-export type ClassLook = { icon?: IconDef; connectors: Connectors; connector?: boolean };
-export type IconCache = Map<string, Promise<{ icon?: IconDef; connectors: Connectors; connector: boolean }>>;
+/** `art`: the class's own Icon graphics, drawn whole by IconArt (articula#18); `icon` is their token version. */
+export type ClassLook = { icon?: IconDef; art?: ArtLayer[]; connectors: Connectors; connector?: boolean };
+export type IconCache = Map<string, Promise<{ icon?: IconDef; art?: ArtLayer[]; connectors: Connectors; connector: boolean }>>;
 
 const short = (cls: string) => cls.slice(cls.lastIndexOf(".") + 1);
 
@@ -36,24 +38,24 @@ export async function classLook(omc: OmcCalls, cache: IconCache, cls: string, id
   let entry = cache.get(cls);
   if (!entry) {
     entry = (async () => {
-      const got = await omc.op<{ icon?: IconDef; connectors?: Connectors }>("icon", { class: cls }).catch(() => ({}) as { icon?: IconDef; connectors?: Connectors });
+      const got = await omc.op<{ icon?: IconDef; art?: ArtLayer[]; connectors?: Connectors }>("icon", { class: cls }).catch(() => ({}) as { icon?: IconDef; art?: ArtLayer[]; connectors?: Connectors });
       const restriction = (await omc.call(`getClassRestriction(${cls})`).catch(() => "")).replace(/"/g, "");
-      return { icon: got.icon, connectors: got.connectors ?? {}, connector: restriction === "connector" };
+      return { icon: got.icon, art: got.art, connectors: got.connectors ?? {}, connector: restriction === "connector" };
     })();
     cache.set(cls, entry);
   }
-  const { icon, connectors, connector } = await entry;
+  const { icon, art, connectors, connector } = await entry;
   const merged: Connectors = { ...connectors };
   const name = short(cls);
   if (!merged[name] && BUILTIN[name]) merged[name] = BUILTIN[name];
   if (connector) {
     const kind = merged[name]?.kind;
     const port: IconPort = { id, class: name, side: kind === "output" ? "left" : "right", at: 50 };
-    return { icon: { ...(icon ?? { g: [] }), ports: [port] }, connectors: merged, connector: true };
+    return { icon: { ...(icon ?? { g: [] }), ports: [port] }, art, connectors: merged, connector: true };
   }
   // A class without an Icon annotation is drawn as its name, so a part is never an empty plate.
   const drawn: IconDef | undefined = icon && icon.g.length === 0 ? { ...icon, g: [{ t: "text", x: 50, y: 50, s: name }] } : icon;
-  return { icon: drawn, connectors: merged };
+  return { icon: drawn, art, connectors: merged };
 }
 
 export const connectorOf = (connectors: Connectors, cls: string): ConnectorDef | undefined => connectors[cls];

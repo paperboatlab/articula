@@ -25,7 +25,8 @@ body { background: var(--surface-ground); color: var(--text); font: var(--size-s
 .stage-pane[hidden] { display: none; }
 .stage-pane > .canvas { flex: 1; }
 .stage-empty { flex: 1; display: grid; place-items: center; margin: 0; color: var(--text-muted); }
-.stage-view > .dock-slot { position: absolute; left: 0; right: 0; bottom: 12px; display: flex; justify-content: center; pointer-events: none; }
+/* the dock centres beside the canvas tools (four 24 px round keys bottom-left), never over them */
+.stage-view > .dock-slot { position: absolute; left: 136px; right: 0; bottom: 12px; display: flex; justify-content: center; pointer-events: none; }
 .stage-view > .dock-slot > * { pointer-events: auto; }
 .studio.no-dock .dock-slot { display: none; }
 

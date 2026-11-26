@@ -5,7 +5,7 @@ The window
 ----------
 
 The bar holds the menus, the workspace (a folder or a hub, its menu under the chevron), **Check**,
-**Simulate**, the runtimes key (omc's state), the Panels key and the theme; in a Paperboat window the
+**Simulate**, the runtimes key (omc's state) and the Panels key; in a Paperboat window the
 window's own keys end it. Below it, three cards: **Files** and **Library** at the left (:kbd:`Ctrl B`),
 the model in the middle with the **Console** under it (:kbd:`Ctrl J`), the source and **Simulate** at
 the right (:kbd:`Ctrl Alt B`). Each card hides to a slim bar. The tab above the model names its file.
@@ -22,7 +22,7 @@ Open and save
 -------------
 
 The File menu is the same in every Paperboat app: New model · Open file… (:kbd:`Ctrl O`) · Open folder…
-(:kbd:`Ctrl K Ctrl O`) · Open recent · Connect to a hub… · Save (:kbd:`Ctrl S`) · Save as…
+(:kbd:`Ctrl Shift O`) · Open recent · Connect to a hub… · Save (:kbd:`Ctrl S`) · Save as…
 (:kbd:`Ctrl Shift S`) · Close file (:kbd:`Ctrl W`) · Close folder · Settings… (:kbd:`Ctrl ,`).
 
 **The hub decides the picker.** Outside a hub, Open file… asks: a local file (your system's file

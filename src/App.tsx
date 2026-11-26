@@ -1,14 +1,13 @@
 // Articula: an OpenModelica editor (agent-docs/rebrand; the window of Julix and Malachite): the bar (mark,
-// menus, the workspace well, Check and Simulate, the runtimes key, the Panels key, the theme, the window
-// keys); Files and Library at the left; the model's views in the middle (diagram, icon, 3D, text) over the
+// menus, the workspace well, Check and Simulate, the runtimes key, the Panels key, the window keys); Files and Library at the left; the model's views in the middle (diagram, icon, 3D, text) over the
 // Console; the source and Simulate at the right. Without a workspace, the Start page in the bay (the one
 // file workflow: plans/2026-11-26_11-05_one_file_workflow.md). Provides StudioContext; the popover opens on
 // a component click, the interface sheet on Alt V, the export dock under the stage.
 
 import { ReactFlowProvider } from "@xyflow/react";
-import { About, AppMark, Key, MenuBar, Notifications, Panel, PanelsKey, RuntimesKey, Search, Segmented, Split as Gutter, ThemePicker, Toasts, WindowKeys, readStored, useToasts, writeStored, type PaneRect, type SearchItem, type Theme } from "@paperboatlab/ui";
+import { About, AppMark, Icon, Key, MenuBar, Notifications, Panel, PanelsKey, RuntimesKey, Search, Segmented, SettingRow, Settings, SettingsSection, ShortcutList, Split as Gutter, ThemeSetting, Toasts, WindowKeys, readStored, useToasts, writeStored, type PaneRect, type SearchItem, type Theme } from "@paperboatlab/ui";
 import { HelpWindow } from "@paperboatlab/ui";
-import { afterClose, EditorTabs, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
+import { afterClose, EditorSettingsPane, EditorTabs, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
 import { helpCommand, SEARCH_CHORD, useShortcuts, type Command } from "@paperboatlab/ui";
 import { omHelp } from "./shell/help.ts";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
@@ -162,6 +161,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [packagesOpen, setPackagesOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [settingsPage, setSettingsPage] = useState<string | null>(null); // the page Settings is open on
   // About's Paperboat: undefined while the server is asked, null when it isn't installed.
   const [paperboat, setPaperboat] = useState<string | null | undefined>(undefined);
   useEffect(() => {
@@ -171,7 +171,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     return () => { live = false; };
   }, [omc, aboutOpen]);
   const [helpQuery, setHelpQuery] = useState<string | null>(null);
-  const [searchOpen, setSearchOpen] = useState(false); // the command search (Ctrl+K)
+  const [searchOpen, setSearchOpen] = useState(false); // the command search (Ctrl K)
   const [logs, setLogs] = useState<Log[]>([]);
   const consoleShown = !hidden.b;
   const setConsoleShown = (shown: boolean) => toggle("b", !shown);
@@ -473,7 +473,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   /** A .mo dropped on the Start page: its text lands in Articula's own folder (a page gets no real path). */
   const onDrop = (e: DragEvent) => {
     const f = [...e.dataTransfer.files].find((one) => one.name.endsWith(".mo"));
-    if (!f) return void show({ title: "Drop a .mo file", detail: "a folder opens with Open folder… (Ctrl K Ctrl O)", state: "failed" });
+    if (!f) return void show({ title: "Drop a .mo file", detail: "a folder opens with Open folder… (Ctrl Shift O)", state: "failed" });
     void f.text().then((text) => openDocument(f.name, text));
   };
   const shownDocs = orderTabs(docs.map((d) => d.file), pinned).map((f) => docs.find((d) => d.file === f)!);
@@ -745,9 +745,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       onSaveAs: saveAs,
       onCloseFile: () => model?.file && guard(undefined, (autosave) => closeDocuments([model.file!], autosave)),
       onCloseWorkspace: closePlace,
-      // ponytail: Articula has no Settings window; its settings are the editor's (the Text view's gear) and the theme
-      onSettings: () => (setStageView("text"), requestAnimationFrame(() => document.querySelector<HTMLElement>(".stage-view .settings-key")?.click())),
-    }).map((c) => (c.id === "file.settings" && !model ? { ...c, enabled: false, why: "open a model: its Text view has the editor settings" } : c)),
+      onSettings: () => setSettingsPage("general"),
+    }),
     {
       id: "file.new-class",
       label: "New class…",
@@ -780,7 +779,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       label: "Export station…",
       menu: "model",
       group: "export",
-      shortcut: "Ctrl+E",
+      shortcut: "Ctrl E",
       chord: { key: "e", ctrl: true },
       enabled: exportReady,
       why: exportWhy || undefined,
@@ -788,8 +787,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     },
 
     // Edit menu
-    { id: "undo", label: "Undo", menu: "edit", group: "history", shortcut: "Ctrl+Z", enabled: actions.canUndo, run: actions.undo },
-    { id: "redo", label: "Redo", menu: "edit", group: "history", shortcut: "Ctrl+Shift+Z", enabled: actions.canRedo, run: actions.redo },
+    { id: "undo", label: "Undo", menu: "edit", group: "history", shortcut: "Ctrl Z", enabled: actions.canUndo, run: actions.undo },
+    { id: "redo", label: "Redo", menu: "edit", group: "history", shortcut: "Ctrl Shift Z", enabled: actions.canRedo, run: actions.redo },
 
     // Model menu (#68)
     {
@@ -797,7 +796,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       label: "Check",
       menu: "model",
       group: "check",
-      shortcut: "Ctrl+Shift+C",
+      shortcut: "Ctrl Shift C",
       chord: { key: "c", ctrl: true, shift: true },
       enabled: Boolean(model),
       run: () => void runCheck(),
@@ -807,7 +806,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       label: "Show the flat model",
       menu: "model",
       group: "check",
-      shortcut: "Ctrl+Shift+F",
+      shortcut: "Ctrl Shift F",
       chord: { key: "f", ctrl: true, shift: true },
       enabled: Boolean(model),
       run: () => (setView("flat"), setSide(() => true)),
@@ -824,23 +823,26 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     },
 
     // Model menu: Simulate and its settings (Check and the flat model are above)
-    { id: "simulate", label: "Simulate", menu: "model", group: "simulate", shortcut: "Ctrl+R", chord: { key: "r", ctrl: true }, enabled: !!model && !running, why: running ? "a simulation is running" : "open a model first", run: () => (setSide(() => true), requestAnimationFrame(() => window.dispatchEvent(new Event("articula:simulate")))) },
+    { id: "simulate", label: "Simulate", menu: "model", group: "simulate", shortcut: "Ctrl R", chord: { key: "r", ctrl: true }, enabled: !!model && !running, why: running ? "a simulation is running" : "open a model first", run: () => (setSide(() => true), requestAnimationFrame(() => window.dispatchEvent(new Event("articula:simulate")))) },
     { id: "cancel-simulate", label: "Cancel simulation", menu: "model", group: "simulate", enabled: running, why: "no simulation is running", run: () => window.dispatchEvent(new Event("articula:cancel")) },
     { id: "solver", label: "Solver settings…", menu: "model", group: "solver", run: () => (setSide(() => true), window.dispatchEvent(new Event("articula:solver"))) },
     { id: "libraries", label: "Libraries…", menu: "model", group: "libraries", run: () => setPackagesOpen(true) },
 
     // View menu
-    { id: "view.search", label: "Command search…", menu: "view", group: "search", shortcut: "Ctrl+K", chord: SEARCH_CHORD, quiet: true, run: () => setSearchOpen(true) },
-    { id: "rail", label: "Files and library", menu: "view", group: "panes", shortcut: "Ctrl+B", chord: { key: "b", ctrl: true }, checked: !railHidden, run: () => toggle("l") },
-    { id: "side", label: "Source and Simulate", menu: "view", group: "panes", shortcut: "Ctrl+Alt+B", chord: { key: "b", ctrl: true, alt: true }, checked: side, run: () => toggle("r") },
-    { id: "console", label: "Console", menu: "view", group: "panes", shortcut: "Ctrl+J", chord: { key: "j", ctrl: true }, checked: consoleShown, run: toggleConsole },
+    { id: "view.search", label: "Command search…", menu: "view", group: "search", shortcut: "Ctrl K", chord: SEARCH_CHORD, quiet: true, run: () => setSearchOpen(true) },
+    { id: "rail", label: "Files and library", menu: "view", group: "panes", shortcut: "Ctrl B", chord: { key: "b", ctrl: true }, checked: !railHidden, run: () => toggle("l") },
+    { id: "side", label: "Source and Simulate", menu: "view", group: "panes", shortcut: "Ctrl Alt B", chord: { key: "b", ctrl: true, alt: true }, checked: side, run: () => toggle("r") },
+    { id: "console", label: "Console", menu: "view", group: "panes", shortcut: "Ctrl J", chord: { key: "j", ctrl: true }, checked: consoleShown, run: toggleConsole },
     ...stageOptions.map((option): Command => ({ id: `stage-${option.value}`, label: option.label, menu: "view", group: "stage", checked: stageView === option.value, run: () => setStageView(option.value) })),
     { id: "flat", label: "Flat model", menu: "view", group: "source", checked: view === "flat", run: () => (setView("flat"), setSide(() => true)) },
     { id: "cpp", label: "Causal ODE (C++)", menu: "view", group: "source", checked: view === "cpp", run: () => (setView("cpp"), setSide(() => true)) },
     ...(["code", "split", "scopes"] as Focus[]).map((f): Command => ({ id: `focus-${f}`, label: f === "split" ? "Source and plots" : f === "code" ? "Source only" : "Plots only", menu: "view", group: "focus", checked: focus === f, run: () => (setFocus(f), setSide(() => true)) })),
-    { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
+    { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
     ...THEMES.map((t): Command => ({ id: `theme-${t}`, label: t[0].toUpperCase() + t.slice(1), menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
     { ...helpCommand(() => setHelpQuery(helpContext())), menu: "help" },
+    // Ctrl / in the text editor is its toggle comment: the key opens Settings only from outside it
+    { id: "help.shortcuts", label: "Keyboard shortcuts", menu: "help", group: "help", shortcut: "Ctrl /", chord: { key: "/", ctrl: true },
+      enabled: () => !document.activeElement?.closest(".cm-editor"), run: () => setSettingsPage("shortcuts") },
     { id: "about", label: "About Articula", menu: "help", group: "about", run: () => setAboutOpen(true) },
   ];
   useShortcuts(commands);
@@ -875,8 +877,6 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             }]} footer={(close) => <><span>Libraries live with this workspace.</span><Key size="sm" kind="quiet" icon="package" onClick={() => { close(); setPackagesOpen(true); }}>Libraries…</Key></>} />
             <Notifications {...notes} />
             <PanelsKey panels={PANELS.map((p) => ({ id: p.side, label: p.name, keys: p.keys, shown: !hidden[p.side] }))} layout={LAYOUT} onToggle={(id) => toggle(id as Side)} />
-            <span className="lsep" />
-            <ThemePicker theme={theme} onChange={setTheme} />
             <WindowKeys />
           </span>
         </header>
@@ -950,8 +950,6 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                       line={sourceLine}
                       theme={shown}
                       settings={settings.editor}
-                      onSettings={settings.setEditor}
-                      configFile={settings.file}
                       base={model.file ? git?.head[model.file] ?? null : null}
                       onEditor={(handle) => {
                         editorHandle.current = handle;
@@ -1069,6 +1067,48 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         {aboutOpen && <About app="articula" role="Acausal physical modelling on OpenModelica" version={STUDIO_VERSION}
           paperboat={paperboat} info={`omc ${/\d+\.\d+\.\d+/.exec(status.version)?.[0] ?? "…"} · protocol articula/0`}
           repo="paperboatlab/articula" credits={CREDITS} onClose={() => setAboutOpen(false)} />}
+        {settingsPage && (
+          <Settings app="Articula" page={settingsPage} onClose={() => setSettingsPage(null)} pages={[
+            { id: "general", label: "General", icon: "a-settings", body: <ThemeSetting theme={theme} onTheme={setTheme} /> },
+            { id: "articula", label: "Articula", icon: "mark-articula", body: <>
+              <SettingsSection title="OpenModelica">
+                <SettingRow label="omc" hint={`${status.state === "ready" ? "Running" : status.state === "failed" ? "Stopped: the next call starts a new session" : "Starting"}${status.mode ? `, ${status.mode === "native" ? "on this computer" : `in ${status.mode}`}` : ""}; one session per workspace`}>
+                  <span className="well">{omcVersion ?? "…"}</span>
+                </SettingRow>
+                <SettingRow label="Libraries" hint="Modelica libraries live with this workspace">
+                  <Key size="sm" icon="package" onClick={() => (setSettingsPage(null), setPackagesOpen(true))}>Libraries…</Key>
+                </SettingRow>
+              </SettingsSection>
+              <SettingsSection title="Simulation">
+                <SettingRow label="Solver" hint="omc's integrator, kept per model">
+                  <Key size="sm" disabled={!model} title={model ? undefined : "open a model first"} onClick={() => (setSettingsPage(null), commands.find((c) => c.id === "solver")?.run())}>Solver settings…</Key>
+                </SettingRow>
+              </SettingsSection>
+              <SettingsSection title="Export">
+                <SettingRow label="Station" hint="A model or block becomes a Paperboat station (.pst) for Simplicial">
+                  <Key size="sm" disabled={!exportReady} title={exportWhy || undefined} onClick={() => (setSettingsPage(null), void handleExportStation())}>Export station…</Key>
+                </SettingRow>
+              </SettingsSection>
+            </> },
+            { id: "editor", label: "Editor", icon: "file-code", body: <EditorSettingsPane settings={settings.editor} onSettings={settings.setEditor} file={settings.file} /> },
+            ...(place?.kind === "hub" ? [{ id: "hub", label: "Hub", icon: "mark-malachite" as const, body: <div className="hub-settings">
+              <SettingsSection title="The hub">
+                <SettingRow label="Name"><span className="well">{place.name}</span></SettingRow>
+                <SettingRow label="Folder"><span className="well wide" title={place.root}><Icon name="folder" size={14} /><span>{`\u200e${hub?.path ?? place.root}`}</span></span></SettingRow>
+                <SettingRow label="Switch hub" hint="The open models close; unsaved changes ask first">
+                  <Key size="sm" onClick={() => (setSettingsPage(null), openConnect())}>Switch hub…</Key>
+                </SettingRow>
+                <SettingRow label="Close hub" hint="Back to the Start page">
+                  <Key size="sm" onClick={() => (setSettingsPage(null), closePlace())}>Close hub</Key>
+                </SettingRow>
+                <SettingRow label="The hub's own settings" hint="Its author, history and what it leaves out are set in Malachite">
+                  <Key size="sm" icon="mark-malachite" onClick={() => (setSettingsPage(null), openInMalachite())}>Open in Malachite</Key>
+                </SettingRow>
+              </SettingsSection>
+            </div> }] : []),
+            { id: "shortcuts", label: "Shortcuts", icon: "keys", body: <ShortcutList commands={commands} menus={MENUS} /> },
+          ]} />
+        )}
         {helpQuery !== null && <HelpWindow app="Articula" provider={helpProvider} commands={commands} query={helpQuery} onClose={() => setHelpQuery(null)} />}
 
         <Toasts toasts={notes.toasts} onDismiss={notes.dismiss} />

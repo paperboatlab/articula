@@ -500,6 +500,32 @@ json op(mo::Omc& omc, json request, const mo::Session& session = {}) {
   return json::parse(mo::handle(omc, request.dump(), session));
 }
 
+#ifndef _WIN32
+// A Paperboat home of the test's own ($PAPERBOAT_HOME), and a paperboat ($PAPERBOAT_BIN) that knows one
+// hub, tank-lab, as `paperboat hub list --json` lists it. The workspace starts empty again.
+struct Store {
+  fs::path home = fs::temp_directory_path() / "articula-store-test" / "home";
+  fs::path hub = fs::temp_directory_path() / "articula-store-test" / "hubs" / "tank-lab";
+  Store() {
+    fs::remove_all(home.parent_path());
+    fs::create_directories(hub);
+    const fs::path bin = home.parent_path() / "paperboat";
+    std::ofstream(bin) << "#!/bin/sh\n[ \"$1 $2\" = \"hub list\" ] && echo '[{\"id\": \"h1\", \"name\": \"tank-lab\", \"path\": \"" << hub.string()
+                       << "\", \"place\": \"local\", \"shown\": \"~/hubs/tank-lab\"}]'\n";
+    fs::permissions(bin, fs::perms::owner_all);
+    setenv("PAPERBOAT_HOME", home.c_str(), 1);
+    setenv("PAPERBOAT_BIN", bin.c_str(), 1);
+    mo::Omc omc;
+    mo::handle(omc, R"({"op": "close_workspace"})");
+  }
+  ~Store() {
+    unsetenv("PAPERBOAT_HOME");
+    unsetenv("PAPERBOAT_BIN");
+    fs::remove_all(home.parent_path());
+  }
+};
+#endif
+
 }  // namespace
 
 TEST_CASE("set_icon writes tokens as fixed Modelica values and refuses what it can't", "[articula]") {
@@ -535,7 +561,7 @@ TEST_CASE("set_icon round-trips the Wave 2 icon goldens through omc", "[articula
     const std::string model = std::string("RT") + stem;
     const fs::path file = fs::temp_directory_path() / (model + ".mo");
     std::ofstream(file) << "model " << model << "\nend " << model << ";\n";
-    CHECK(op(omc, {{"id", 1}, {"op", "open"}}, {.file = file})["ok"] == true);
+    CHECK(op(omc, {{"id", 1}, {"op", "open"}, {"file", file.string()}})["ok"] == true);
     const json reply = op(omc, {{"id", 2}, {"op", "set_icon"}, {"model", model}, {"icon", golden}});
     INFO(reply.dump());
     REQUIRE(reply["ok"] == true);
@@ -571,7 +597,7 @@ end Decay;
   std::vector<json> pushed;
   const mo::Session session{[&](const std::string& text) { pushed.push_back(json::parse(text)); }, file};
 
-  const json opened = op(omc, {{"id", 1}, {"op", "open"}}, session);
+  const json opened = op(omc, {{"id", 1}, {"op", "open"}, {"file", file.string()}}, session);
   REQUIRE(opened["ok"] == true);
   CHECK(opened["result"]["model"] == "Decay");
 
@@ -644,7 +670,10 @@ end Lag;
   fs::remove_all(dir);
 }
 
-TEST_CASE("workspace lists the model folder's classes and packages", "[articula]") {
+TEST_CASE("tree lists the workspace's classes and packages", "[articula]") {
+#ifndef _WIN32
+  const Store store;
+#endif
   const fs::path dir = fs::temp_directory_path() / "paperboat-squero-workspace";
   fs::remove_all(dir);
   fs::create_directories(dir / "Pkg" / "Sub");
@@ -657,23 +686,14 @@ TEST_CASE("workspace lists the model folder's classes and packages", "[articula]
   std::ofstream(dir / "Quick.mo") << "model Quick\nend Quick;\n";
   std::ofstream(dir / "notes.txt") << "not Modelica\n";
 
-  mo::Omc omc;  // never started: workspace reads the disk
-  const json quick = op(omc, {{"op", "workspace"}, {"file", (dir / "Quick.mo").string()}});
-  INFO(quick.dump());
-  REQUIRE(quick["ok"] == true);
-  CHECK(quick["result"]["root"] == dir.string());
-  CHECK(quick["result"]["package"] == false);
-  bool saw_quick = false;
-  for (const auto& entry : quick["result"]["entries"]) {
-    if (entry["name"] == "Quick") saw_quick = entry["kind"] == "class" && entry["depth"] == 0;
-  }
-  CHECK(saw_quick);
-
-  const json nested = op(omc, {{"op", "workspace"}, {"file", (dir / "Pkg" / "Sub" / "B.mo").string()}});
+  mo::Omc omc;  // never started: the tree reads the disk
+  CHECK(op(omc, {{"op", "tree"}})["error"] == "no folder open");
+  // a package's folder opens the folder holding its top package
+  REQUIRE(op(omc, {{"op", "open_folder"}, {"path", (dir / "Pkg" / "Sub").string()}})["result"]["root"] == dir.string());
+  const json nested = op(omc, {{"op", "tree"}});
   REQUIRE(nested["ok"] == true);
   INFO(nested.dump());
   CHECK(nested["result"]["root"] == dir.string());
-  CHECK(nested["result"]["package"] == true);
   std::vector<std::string> seen;
   for (const auto& entry : nested["result"]["entries"]) seen.push_back(entry["kind"].get<std::string>() + ":" + entry["name"].get<std::string>() + ":" + std::to_string(entry["depth"].get<int>()));
   CHECK(seen == std::vector<std::string>{"package:Pkg:0", "class:A:1", "class:F:1", "class:Port:1", "package:Sub:1", "class:B:2", "class:Quick:0"});
@@ -849,7 +869,7 @@ end Bad;
   std::vector<mo::OmcMessage> logged;
   omc.on_log([&](const mo::OmcMessage& message) { logged.push_back(message); });
   const mo::Session session{nullptr, good};
-  REQUIRE(op(omc, {{"id", 1}, {"op", "open"}}, session)["ok"] == true);
+  REQUIRE(op(omc, {{"id", 1}, {"op", "open"}, {"file", good.string()}}, session)["ok"] == true);
 
   logged.clear();
   const json checked = op(omc, {{"id", 2}, {"op", "check_model"}, {"model", "Good"}});
@@ -932,17 +952,103 @@ TEST_CASE("visual_shapes reads omc's _visual.xml", "[articula]") {
   CHECK(shapes[0]["color"][0] == 255.0);
 }
 
-TEST_CASE("with no model named, the Studio opens its own folder", "[articula]") {
-  const auto dir = std::filesystem::temp_directory_path() / "squero-default-workspace-test";
-  std::filesystem::remove_all(dir);
-  // A fresh folder is created and opens a new Untitled model.
-  CHECK(articula::default_file(dir) == dir / "Untitled.mo");
-  CHECK(std::filesystem::is_directory(dir));
-  // Otherwise the first model in it, never its package.mo.
-  std::ofstream(dir / "package.mo") << "package P\nend P;\n";
-  std::ofstream(dir / "b.mo") << "model b\nend b;\n";
-  std::ofstream(dir / "a.mo") << "model a\nend a;\n";
-  CHECK(articula::default_file(dir) == dir / "a.mo");
-  std::filesystem::remove_all(dir);
+TEST_CASE("Articula's own folder is where a model goes without a workspace", "[articula]") {
   CHECK(articula::default_workspace().filename() == (std::getenv("ARTICULA_WORKSPACE") ? articula::default_workspace().filename() : "articula"));
 }
+
+#ifndef _WIN32
+// The one file workflow: the workspace switched at runtime, and the shared store under $PAPERBOAT_HOME.
+TEST_CASE("open_folder, connect and close switch the workspace and record it", "[articula]") {
+  const Store store;
+  const fs::path dir = store.home.parent_path() / "projects" / "tank-level";
+  fs::create_directories(dir);
+  std::ofstream(dir / "Tank.mo") << "model Tank\nend Tank;\n";
+  mo::Omc omc;  // never started: switching only moves its project
+
+  CHECK(op(omc, {{"op", "workspace"}})["result"]["kind"] == nullptr);
+  const json opened = op(omc, {{"op", "open_folder"}, {"path", dir.string() + "/"}});
+  INFO(opened.dump());
+  CHECK(opened["result"] == json{{"kind", "folder"}, {"root", dir.string()}, {"name", "tank-level"}});
+  CHECK(op(omc, {{"op", "workspace"}})["result"]["root"] == dir.string());
+  CHECK(op(omc, {{"op", "open_folder"}, {"path", (dir / "nope").string()}})["ok"] == false);
+
+  // a hub Malachite knows (the fake paperboat lists it): connect by id; its folder opened is the hub too
+  const json hub = op(omc, {{"op", "connect"}, {"hub", "h1"}});
+  INFO(hub.dump());
+  CHECK(hub["result"] == json{{"kind", "hub"}, {"root", store.hub.string()}, {"name", "tank-lab"}, {"hub", "h1"}});
+  CHECK(op(omc, {{"op", "connect"}, {"hub", "nope"}})["ok"] == false);
+  CHECK(op(omc, {{"op", "open_folder"}, {"path", store.hub.string()}})["result"]["kind"] == "hub");
+
+  CHECK(op(omc, {{"op", "close_workspace"}})["result"] == json{{"kind", nullptr}});
+  CHECK(op(omc, {{"op", "workspace"}})["result"]["kind"] == nullptr);
+
+  // recent.json: newest first, one entry per kind and path, written whole
+  const json recent = json::parse(read_text(store.home / "recent.json"));
+  REQUIRE(recent["version"] == 1);
+  std::vector<std::string> seen;
+  for (const auto& e : recent["recent"]) seen.push_back(e["kind"].get<std::string>() + ":" + e["path"].get<std::string>());
+  CHECK(seen == std::vector<std::string>{"hub:" + store.hub.string(), "folder:" + dir.string()});
+  CHECK(recent["recent"][0]["hub"] == "h1");
+  CHECK(recent["recent"][0]["app"] == "articula");
+  CHECK(op(omc, {{"op", "recent"}})["result"]["recent"].size() == 2);
+  CHECK(op(omc, {{"op", "recent_forget"}, {"kind", "hub"}, {"path", store.hub.string()}})["result"]["recent"].size() == 1);
+  CHECK(op(omc, {{"op", "recent_forget"}})["result"]["recent"].empty());
+}
+
+TEST_CASE("recent.json keeps 40 entries and drops what isn't one", "[articula]") {
+  const Store store;
+  json list = json::array({json{{"kind", "folder"}}, json("junk")});
+  for (int i = 0; i < 45; ++i) list.push_back({{"kind", "file"}, {"path", "/m/" + std::to_string(i) + ".mo"}, {"app", "julix"}, {"at", 1000 - i}});
+  fs::create_directories(store.home);
+  std::ofstream(store.home / "recent.json") << json{{"version", 1}, {"recent", list}}.dump();
+  mo::Omc omc;
+  const fs::path dir = store.home.parent_path() / "p";
+  fs::create_directories(dir);
+  REQUIRE(op(omc, {{"op", "open_folder"}, {"path", dir.string()}})["ok"] == true);
+  const json recent = op(omc, {{"op", "recent"}})["result"]["recent"];
+  CHECK(recent.size() == 40);
+  CHECK(recent[0]["path"] == dir.string());
+  CHECK(recent[1]["path"] == "/m/0.mo");  // another app's files stay, in order
+}
+
+TEST_CASE("no Malachite, no hubs: the list is null, not empty", "[articula]") {
+  const Store store;
+  mo::Omc omc;
+  CHECK(op(omc, {{"op", "hubs"}})["result"].size() == 1);
+  setenv("PAPERBOAT_BIN", "/nonexistent/paperboat", 1);
+  CHECK(op(omc, {{"op", "hubs"}})["result"] == nullptr);
+  CHECK(op(omc, {{"op", "connect"}, {"hub", "h1"}})["ok"] == false);
+}
+
+TEST_CASE("settings.json holds the theme every app starts in", "[articula]") {
+  const Store store;
+  mo::Omc omc;
+  CHECK(op(omc, {{"op", "settings"}})["result"] == json{{"version", 1}, {"theme", "system"}});
+  fs::create_directories(store.home);
+  std::ofstream(store.home / "settings.json") << R"({"version": 1, "theme": "light", "font": "big"})";
+  CHECK(op(omc, {{"op", "settings"}})["result"]["theme"] == "light");
+  CHECK(op(omc, {{"op", "settings_write"}, {"theme", "dark"}})["result"]["theme"] == "dark");
+  CHECK(op(omc, {{"op", "settings_write"}, {"theme", "pink"}})["ok"] == false);
+  const json written = json::parse(read_text(store.home / "settings.json"));
+  CHECK(written["theme"] == "dark");
+  CHECK(written["font"] == "big");  // another app's key stays
+  for (const auto& e : fs::directory_iterator(store.home)) CHECK(e.path().extension() != ".tmp");
+}
+
+TEST_CASE("a model from outside the workspace switches to its folder or its hub", "[articula][omc]") {
+  if (!have_omc()) SKIP("omc not installed");
+  const Store store;
+  const fs::path dir = store.home.parent_path() / "outside";
+  fs::create_directories(dir);
+  std::ofstream(dir / "Quick.mo") << "model Quick\nend Quick;\n";
+  std::ofstream(store.hub / "InHub.mo") << "model InHub\nend InHub;\n";
+  mo::Omc omc(in_tmp());
+  const json a = op(omc, {{"op", "open"}, {"file", (dir / "Quick.mo").string()}});
+  INFO(a.dump());
+  CHECK(a["result"]["workspace"]["root"] == dir.string());
+  const json b = op(omc, {{"op", "open"}, {"file", (store.hub / "InHub.mo").string()}});
+  INFO(b.dump());
+  CHECK(b["result"]["workspace"]["kind"] == "hub");
+  CHECK(json::parse(read_text(store.home / "recent.json"))["recent"][0]["hub"] == "h1");
+}
+#endif

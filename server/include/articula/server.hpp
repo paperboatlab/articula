@@ -14,9 +14,21 @@
 // The other ops are Studio's own, written here in C++ (Wave 3). Each is {id, op, …} →
 // {id, ok: true, result: {…}} | {id, ok: false, error}:
 //
-//   open      {}                                → {file, model}      the model the server was started on
-//   workspace {file}                            → {root, file, package, entries:[{name, path, kind, depth}]}
-//                                                  the model's folder as a tree of .mo classes and packages
+//   open      {file?, content?}                 → {file, model, workspace}  a .mo (a relative name lands in the
+//                                                  workspace, none: default_workspace()); one from outside switches
+//                                                  the workspace to its hub or folder. No file: the model the server
+//                                                  was started on while its workspace is open, else {file: null}
+//   workspace {}                                → {kind: "folder"|"hub"|null, root, name, hub?}  what it works in
+//   open_folder {path}                          → workspace          Open folder… (~ allowed); a hub's folder opens the hub
+//   connect   {hub}                             → workspace          Connect to a hub… (an id from `hubs`)
+//   close_workspace {}                          → {kind: null}       Close folder, Close hub: the Start page
+//   tree      {}                                → {root, entries:[{name, path, kind, classKind?, depth}]}
+//                                                  the workspace as a tree of .mo classes and packages
+//   recent    {}                                → {version, recent:[{kind, path, hub?, app, at}], home}
+//   recent_forget {kind?, path?}                → recent             one entry gone, or all (Clear recent)
+//   settings  {}                                → {version, theme}   $PAPERBOAT_HOME/settings.json
+//   settings_write {theme}                      → settings
+//   hubs, hub_files {root}, hub_new {name}, hub_open_malachite {root}: the hubs (`paperboat hub list --json`)
 //   create_class {file, name, kind, within?, base?}
 //                                              → {file, model}      write a class file; append package.order
 //                                                  when it lands in a package
@@ -58,7 +70,7 @@
 namespace articula {
 
 // What a handler may do besides answer: push a message to its client (progress), and which .mo
-// the server was started on.
+// the server was started on (empty: none).
 struct Session {
   std::function<void(const std::string&)> push = {};
   std::filesystem::path file = {};
@@ -76,15 +88,12 @@ nlohmann::json visual_shapes(const std::string& xml, const std::function<nlohman
 // package. Mounted as the omc lease's project.
 std::filesystem::path workspace_of(const std::filesystem::path& file);
 
-// Articula's own folder: $ARTICULA_WORKSPACE, else ~/Documents/paperboat/articula.
+// Articula's own folder, where New model goes without a workspace: $ARTICULA_WORKSPACE, else
+// ~/Documents/paperboat/articula.
 std::filesystem::path default_workspace();
 
-// What opens when no model is named: the first .mo in `dir` (not package.mo), else dir/Untitled.mo.
-// Creates `dir`; the model itself is created by `open` when it doesn't exist.
-std::filesystem::path default_file(const std::filesystem::path& dir = default_workspace());
-
-// Serves until killed. Returns 1 when the port can't be taken. port 0 = 30472, else first free of 30500..30599. `file` is the .mo to open
-// (created as a stub model when it doesn't exist); empty = default_file().
+// Serves until killed. Returns 1 when the port can't be taken. port 0 = 30472, else first free of 30500..30599. `file`: a .mo to
+// open (created as a stub model when it doesn't exist) in its folder or hub, a folder to work in, or empty (the Start page).
 int serve_articula(int port, const std::filesystem::path& app = {}, Omc::Options options = {},
                  const std::filesystem::path& file = {});
 

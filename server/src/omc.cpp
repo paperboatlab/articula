@@ -261,7 +261,7 @@ struct Omc::Impl {
     if (shutting_down) throw OmcError("omc is shutting down");
     control = open_control();
     json args = {{"runtime", options.runtime}, {"mode", "session"}, {"owner", "articula:" + options.project.string()}};
-    if (!options.project.empty()) args["project"] = fs::absolute(options.project).string(), args["policy"] = {{"writable_project", true}};
+    if (!options.project.empty()) args["project"] = fs::absolute(options.project).string(), args["policy"] = {{"writable_project", options.writable_project}};
     lease = control_call("acquire", args);
     backend = lease.value("backend", "");
     workdir = lease.value("work", "");
@@ -416,10 +416,11 @@ void Omc::shutdown() {
   impl_->stop();
 }
 
-void Omc::set_project(const fs::path& project) {
+void Omc::set_project(const fs::path& project, bool writable) {
   std::lock_guard lock(impl_->mutex);
-  if (impl_->options.project == project) return;
+  if (impl_->options.project == project && impl_->options.writable_project == writable) return;
   impl_->options.project = project;
+  impl_->options.writable_project = writable;
   impl_->stop();
   std::erase_if(impl_->replay, [](const std::string& r) { return r.starts_with("loadFile("); });
   impl_->msl_tried = false;

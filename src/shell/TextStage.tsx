@@ -22,6 +22,7 @@ export function TextStage({
   theme,
   settings,
   base,
+  readOnly,
   onEditor,
 }: {
   model: StudioModel;
@@ -33,6 +34,8 @@ export function TextStage({
   settings: EditorSettings;
   /** HEAD's copy of the file for the git gutter; null when untracked or outside a repository. */
   base?: string | null;
+  /** An example opened in place: why the text takes no edit (it reads, selects and copies). */
+  readOnly?: string;
   onEditor?: (handle: TextEditorHandle | null) => void;
 }) {
   const [text, setText] = useState<string | null>(null);
@@ -66,7 +69,7 @@ export function TextStage({
 
   const dirty = text !== null && text !== saved;
   const save = useCallback(async () => {
-    if (text === null || text === saved || busy) return;
+    if (text === null || text === saved || busy || readOnly) return;
     setBusy(true);
     setError("");
     try {
@@ -77,7 +80,7 @@ export function TextStage({
     } finally {
       setBusy(false);
     }
-  }, [text, saved, busy]);
+  }, [text, saved, busy, readOnly]);
   const saveRef = useRef(save);
   saveRef.current = save;
 
@@ -124,7 +127,8 @@ export function TextStage({
         {text !== null && (
           <Key size="sm" kind="quiet" icon="copy" onClick={() => void navigator.clipboard?.writeText(text)}>Copy</Key>
         )}
-        <Key size="sm" kind="primary" busy={busy} disabled={!dirty || busy} onClick={() => void save()}>{busy ? "Saving…" : "Save"}</Key>
+        {readOnly ? <span className="lbl" title={readOnly}>read-only</span>
+          : <Key size="sm" kind="primary" busy={busy} disabled={!dirty || busy} onClick={() => void save()}>{busy ? "Saving…" : "Save"}</Key>}
       </header>
       <div className="code-editor">
         {text === null ? (
@@ -134,6 +138,7 @@ export function TextStage({
             key={model.file}
             value={text}
             onChange={setText}
+            readOnly={!!readOnly}
             settings={settings}
             appTheme={theme}
             ariaLabel="Modelica source editor"

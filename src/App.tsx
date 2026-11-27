@@ -43,7 +43,7 @@ import type { NewClassSpec } from "./shell/newClass.ts";
 import { closeDoc, inside, neighbour, openDoc, type Doc, type GitState, type Workspace, type WorkspaceEntry } from "./shell/workspace.ts";
 import { packageName } from "./shell/newClass.ts";
 import { freeSpot } from "./store/plans.ts";
-import { useStudioStore } from "./store/index.tsx";
+import { exampleWords, useStudioStore } from "./store/index.tsx";
 
 type Focus = "code" | "split" | "scopes";
 type Stage = "diagram" | "icon" | "3d" | "text";
@@ -57,6 +57,9 @@ function serverUrl(): string {
 /** The example this window opened in place, from `paperboat example open`'s URL (paperboat#75): read once, as
  *  the page loads. Its banner tops the stage. */
 const opened = exampleFromUrl(location.search);
+
+/** What writes into the workspace: off in an example's window (paperboat#75). */
+const WRITES = new Set(["file.new", "file.save", "file.new-class", "file.new-package"]);
 
 type Side = "l" | "r" | "b";
 const PANELS: { side: Side; name: string; keys: string }[] = [
@@ -91,6 +94,9 @@ type PromptSpec = {
   onConfirm: (val: string) => void | Promise<void>;
 };
 
+/** What the server says of a workspace that is an example: its id and name, where its exports go, GitHub's copy. */
+type PlaceExample = { id: string; name: string; exports?: string; cache?: boolean };
+
 /** A hub as the server lists it (`paperboat hub list --json`): the kit's Hub and its folder on this computer. */
 type AppHub = Hub & { root: string };
 
@@ -114,7 +120,11 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     read: () => omc.op<{ path: string; text: string | null }>("config"),
     write: (text) => omc.op("config_write", { text }).then(() => undefined),
   }), [omc]);
-  const { api, actions, error, stage } = useStudioStore(omc, status);
+  // An example opened in place (paperboat#75) is read-only: the server's word on the workspace (`example`), the
+  // URL's until the workspace is read. The store refuses every edit with these words; the views lock.
+  const [example, setExample] = useState<PlaceExample | null>(opened ? { id: opened.id, name: opened.name, cache: opened.cache } : null);
+  const readOnly = example ? exampleWords(example.name) : undefined;
+  const { api, actions, error, stage } = useStudioStore(omc, status, readOnly);
   const [popover, setPopover] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
   // which cards are hidden (the Panels key, Ctrl B / Ctrl J / Ctrl Alt B), kept between visits
@@ -364,6 +374,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const applyPlace = (next: Place | null) => {
     const root = next?.root ?? null;
     setPlace(next);
+    setExample((next as (Place & { example?: PlaceExample }) | null)?.example ?? null);
     void readRecent();
     if (root === placeRoot.current) return;
     placeRoot.current = root;
@@ -438,17 +449,19 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   /** The banner's Copy: into the folder the example was opened from, else one picked like Open folder's;
    *  the CLI opens the copy in a new window. */
   const copyExample = (to?: string) => {
-    if (!opened) return;
+    if (!example) return;
     if (!to) {
       const sh = shell();
       if (!sh) return setAsk("copyTo");
       return void sh.pickFolder("Copy the example to").then((p) => p && copyExample(p));
     }
-    void omc.op<{ path: string }>("example_copy", { id: opened.id, to }).then(
-      (r) => show({ title: `Copied ${opened.name}`, detail: `to ${tilde(r.path, home)}, opening in a new window`, state: "done" }),
+    void omc.op<{ path: string }>("example_copy", { id: example.id, to }).then(
+      (r) => show({ title: `Copied ${example.name}`, detail: `to ${tilde(r.path, home)}, opening in a new window`, state: "done" }),
       (e) => fail(e, "Couldn't copy the example"));
   };
-  const banner = opened && <ExampleBanner name={opened.name} folder={opened.to && tilde(opened.to, home)} cache={opened.cache} onCopy={() => copyExample(opened.to)} />;
+  // its Copy goes to the folder it was opened from (the URL's `to`), else one the user picks
+  const exampleTo = opened?.id === example?.id ? opened?.to : undefined;
+  const banner = example && <ExampleBanner name={example.name} folder={exampleTo && tilde(exampleTo, home)} cache={example.cache} onCopy={() => copyExample(exampleTo)} />;
   /** A local .mo: the system's dialog in a Paperboat window, a typed path in a browser. */
   const pickLocal = () => {
     const sh = shell();
@@ -755,7 +768,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
 
   // every render: the File menu's handlers close over the workspace and the open model
   // where an example's Copy goes: the open folder; in an example's own window, the folder it came from
-  const copyTo = opened ? opened.to : place?.root;
+  const copyTo = example ? exampleTo : place?.root;
   const commands: Command[] = [
     // File: the same items in the same order in every app (the kit's fileMenu); the model's own below
     ...fileMenu({
@@ -884,6 +897,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     { id: "about", label: "About Articula", menu: "help", group: "about", run: () => setAboutOpen(true) },
     ...exampleCommands(examples, (id) => void omc.op("example_open", copyTo ? { id, to: copyTo } : { id }).catch((e) => fail(e, "Couldn't open the example"))),
   ];
+  // an example's window: nothing that would write into it runs (Save as still goes elsewhere: a copy the user keeps)
+  if (readOnly) for (const c of commands) if (WRITES.has(c.id)) Object.assign(c, { enabled: false, why: readOnly });
   useShortcuts(commands);
   const helpProvider = useMemo(() => omHelp(omc), [omc]);
 
@@ -940,6 +955,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               collapsed={railHidden}
               onToggle={(h) => toggle("l", h)}
               workspace={workspace}
+              readOnly={!!readOnly}
               git={git}
               active={model?.file}
               onOpen={(file) => void openDocument(file)}
@@ -988,6 +1004,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                   <div className="stage-pane" hidden={stageView !== "text"}>
                     <TextStage
                       model={model}
+                      readOnly={readOnly}
                       actions={actions}
                       line={sourceLine}
                       theme={shown}
@@ -1078,7 +1095,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             onClose={() => setUnsaved(null)} />
         )}
         {transfer && place && (
-          <ArticulaTransfer mode={transfer.mode} kind={transfer.kind} omc={omc} api={api} model={model} root={place.root} run={lastRun}
+          <ArticulaTransfer mode={transfer.mode} kind={transfer.kind} omc={omc} api={api} model={model} root={place.root} run={lastRun} exportsTo={example?.exports}
             hub={place.kind === "hub"} pickOut={place.kind === "hub" ? (hub ? pickExport : undefined) : shell() ? pickExport : undefined}
             stationWhy={exportWhy || undefined}
             onKind={(m, k) => { lastKind.current = { ...lastKind.current, [m]: k }; writeStored("articula.transfer", lastKind.current); }}

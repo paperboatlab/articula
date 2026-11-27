@@ -29,6 +29,7 @@ export function Rail({
   onDelete,
   onCopyPath,
   onMove,
+  readOnly,
   collapsed,
   onToggle,
   children,
@@ -47,6 +48,8 @@ export function Rail({
   onDelete: (entry: WorkspaceEntry) => void;
   onCopyPath: (entry: WorkspaceEntry) => void;
   onMove: (source: WorkspaceEntry, target?: WorkspaceEntry) => void;
+  /** An example opened in place: no New, Rename, Duplicate, Delete or drag to move (paperboat#75). */
+  readOnly?: boolean;
   /** Hidden to its slim bar. */
   collapsed?: boolean;
   onToggle?: (hidden: boolean) => void;
@@ -78,13 +81,15 @@ export function Rail({
           labels={{ newFile: "New class…", newFolder: "New package…", rename: "Rename…", duplicate: "Duplicate…", delete: "Delete…", copyPath: "Copy path", empty: "No .mo files here yet: File › New class (Ctrl Shift N)." }}
           actions={{
             onOpen: (entry) => onOpen(entry.path),
-            onNewFile: (parent) => onNewClass(find(parent)),
-            onNewFolder: (parent) => onNewPackage(find(parent)),
-            onRename: (entry) => { const one = find(entry); if (one) onRename(one); },
-            onDuplicate: (entry) => { const one = find(entry); if (one) onDuplicate(one); },
-            onDelete: (entry) => { const one = find(entry); if (one) onDelete(one); },
             onCopyPath: (entry) => { const one = find(entry); if (one) onCopyPath(one); },
-            onMove: (source, target) => { const one = find(source); if (one) onMove(one, find(target)); },
+            ...(readOnly ? {} : {
+              onNewFile: (parent?: FileEntry) => onNewClass(find(parent)),
+              onNewFolder: (parent?: FileEntry) => onNewPackage(find(parent)),
+              onRename: (entry: FileEntry) => { const one = find(entry); if (one) onRename(one); },
+              onDuplicate: (entry: FileEntry) => { const one = find(entry); if (one) onDuplicate(one); },
+              onDelete: (entry: FileEntry) => { const one = find(entry); if (one) onDelete(one); },
+              onMove: (source: FileEntry, target?: FileEntry) => { const one = find(source); if (one) onMove(one, find(target)); },
+            }),
           }}
         />
       </div>

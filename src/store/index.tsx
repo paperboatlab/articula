@@ -94,7 +94,12 @@ const asGraph = (m: StudioModel): Graph => ({
 /** What the first open waits on (the splash): omc's session, the MSL, the file, then reading the model. */
 export type OpenStep = { step: "omc" | "library" | "file" } | { step: "read"; model: string; file: string };
 
-export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: StudioApi | null; actions: Actions; error: string; stage: OpenStep } {
+/** Why an example takes no edit (the server says the same, and refuses them too). */
+export const exampleWords = (name: string) => `${name} is an example: it opens read-only. Copy it to a folder to change it`;
+
+/** `readOnly`: an example opened in place (paperboat#75), the words why nothing changes; every edit and every
+ *  write is refused here before it reaches omc or the disk. Running it (check, simulate, export) is not. */
+export function useStudioStore(omc: OmcClient, status: OmcStatus, readOnly?: string): { api: StudioApi | null; actions: Actions; error: string; stage: OpenStep } {
   const [model, setModel] = useState<StudioModel | null>(null);
   const [dirty, setDirty] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);
@@ -108,6 +113,15 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
   const queue = useRef<Promise<unknown>>(Promise.resolve());
 
   const say = useCallback((words: string, failed?: boolean) => setNotice(words ? { text: words, failed } : QUIET), []);
+  const locked = useRef(readOnly);
+  locked.current = readOnly;
+  /** Rejects (and says why) when the model is an example's; nothing is sent. */
+  const writable = useCallback(() => {
+    const why = locked.current;
+    if (!why) return Promise.resolve();
+    setNotice({ text: why, failed: true });
+    return Promise.reject(new Error(why));
+  }, []);
 
   // One edit at a time: the queue keeps an undo replay and a drag from interleaving.
   const enqueue = useCallback(<T,>(job: () => Promise<T>): Promise<T> => {
@@ -140,7 +154,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
 
   const edit = useCallback(
     (exprs: string[]) =>
-      enqueue(() => run(exprs)).then(
+      locked.current ? writable() : enqueue(() => run(exprs)).then(
         () => setNotice(QUIET),
         (e: Error) => {
           setNotice({ text: e.message, failed: true });
@@ -148,7 +162,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
           throw e;
         },
       ),
-    [enqueue, run, refresh],
+    [enqueue, run, refresh, writable],
   );
 
   // Open the server's model once the connection is up; none: the Start page or the folder alone.
@@ -220,6 +234,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
       model,
       selection,
       status,
+      readOnly,
       omc,
       select: (names) => setSelection((prev) => (prev.join() === names.join() ? prev : names)),
       async setParam(path, value) {
@@ -257,6 +272,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         await edit(removeEntryExprs(model, entry));
       },
       async setIcon(icon: IconDef) {
+        await writable();
         await enqueue(async () => {
           await omc.op("set_icon", { model: name, icon });
           for (const expr of iconPortExprs(model, icon)) await omc.call(expr);
@@ -273,7 +289,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         });
       },
     };
-  }, [model, selection, status, omc, edit, enqueue, refresh]);
+  }, [model, selection, status, readOnly, omc, edit, enqueue, refresh, writable]);
 
   const actions = useMemo<Actions>(
     () => ({
@@ -358,6 +374,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         const m = current.current;
         if (!m) return;
         const target = file ?? m.file;
+        await writable();
         await enqueue(async () => {
           await omc.op("save", { model: m.name, ...(target ? { file: target } : {}) });
           setDirty(false);
@@ -369,6 +386,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         if (!m) return;
         const target = filePath.trim();
         if (!target) return;
+        // Save as goes anywhere but the example (the server refuses that): a copy of the model the user keeps
         await enqueue(async () => {
           await omc.op("save", { model: m.name, file: target });
           setDirty(false);
@@ -392,6 +410,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         const raw = name.trim();
         if (!raw) return;
         const target = file?.trim() || (raw.endsWith(".mo") ? raw : `${raw}.mo`);
+        await writable();  // a bare name lands in the workspace: the example
         await enqueue(async () => {
           const opened = await omc.op<{ file: string; model: string }>("open", { file: target });
         const m = await readModel(omc, opened.model, opened.file, looks.current);
@@ -402,25 +421,25 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         });
       },
       createClass(spec) {
-        return enqueue(() => omc.op<{ file: string; model: string }>("create_class", spec));
+        return writable().then(() => enqueue(() => omc.op<{ file: string; model: string }>("create_class", spec)));
       },
       newPackage(parent, name, within) {
-        return enqueue(() => omc.op<{ path: string; name: string }>("new_package", { parent, name, within }));
+        return writable().then(() => enqueue(() => omc.op<{ path: string; name: string }>("new_package", { parent, name, within })));
       },
       duplicateClass(spec) {
-        return enqueue(() => omc.op<{ file: string; model: string }>("duplicate_class", spec));
+        return writable().then(() => enqueue(() => omc.op<{ file: string; model: string }>("duplicate_class", spec)));
       },
       renameClass(spec) {
-        return enqueue(() => omc.op<{ file: string; model: string }>("rename_class", spec));
+        return writable().then(() => enqueue(() => omc.op<{ file: string; model: string }>("rename_class", spec)));
       },
       deleteClass(spec) {
-        return enqueue(() => omc.op<void>("delete_class", spec));
+        return writable().then(() => enqueue(() => omc.op<void>("delete_class", spec)));
       },
       deletePackage(spec) {
-        return enqueue(() => omc.op<void>("delete_package", spec));
+        return writable().then(() => enqueue(() => omc.op<void>("delete_package", spec)));
       },
       moveClass(spec) {
-        return enqueue(() => omc.op<{ file: string; model: string }>("move_class", spec));
+        return writable().then(() => enqueue(() => omc.op<{ file: string; model: string }>("move_class", spec)));
       },
       fileText() {
         const m = current.current;
@@ -430,7 +449,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
       saveText(text) {
         const m = current.current;
         if (!m?.file) return Promise.reject(new Error("the model has no file yet"));
-        return enqueue(async () => {
+        return writable().then(() => enqueue(async () => {
           await omc.op("save", { model: m.name, file: m.file, content: text });
           const opened = await omc.op<{ file: string; model: string }>("open", { file: m.file });
           const next = await readModel(omc, opened.model, opened.file, looks.current);
@@ -438,7 +457,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
           setDirty(false);
           setSelection([]);
           say(`Saved ${opened.model}`);
-        });
+        }));
       },
       async openFile(file: string, content?: string) {
         const target = file.trim();
@@ -468,7 +487,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         });
       },
     }),
-    [notice, say, edit, omc, undo, redo, canUndo, canRedo, dirty, ready, enqueue, refresh],
+    [notice, say, edit, omc, undo, redo, canUndo, canRedo, dirty, ready, enqueue, refresh, writable],
   );
 
   return { api, actions, error, stage };

@@ -85,6 +85,9 @@ export interface StudioApi {
   model: StudioModel;
   selection: string[]; // component names or "R1.n" port paths
   status: OmcStatus;
+  /** An example opened in place (paperboat#75): why nothing can be changed, else undefined. Views show
+   *  their edits off; the store refuses them anyway. */
+  readOnly?: string;
   omc: OmcClient; // raw squero/0 calls (checkModel for the balance count)
   select(names: string[]): void;
   /** "R1.R" sets a component modifier; "J" (no dot) sets a top-level parameter's default. */

@@ -87,5 +87,14 @@ flowchart LR
   (the `hubs` op is null, and no hub word shows). Inside a hub no Git shows.
 - One workspace per server, which omc's lease follows: a file opens in this window, switching the
   workspace to its folder or hub when it lies outside (never a second window); closing goes back to Start.
+- An example opened in place is read-only (paperboat#75). The server knows one from `paperboat example list
+  --json` (every app's, where they are) and `$PAPERBOAT_HOME/cache/examples`, not from the page's URL: every
+  op that writes a file refuses a path in one (save, Save as, new/duplicate/rename/delete/move class, new/delete
+  package, a dropped or new `.mo`, `generate`'s out, an export, Copy into it), the canvas's edit calls are refused
+  while the workspace is one, omc's lease gets it read-only (no `writable_project`), it stays out of
+  `recent.json`, and a hub inside one is no hub (`hubs` leaves it out). Running it writes only omc's work
+  folder; an export goes to `default_workspace()/exports/<its folder>`. The page reads `workspace`'s `example`
+  ({id, name, exports, cache}): the banner, the store refusing every edit with its words, the editor
+  read-only, the canvas locked, the rail without New/Rename/Delete/drag.
 - The shared store is every app's: Articula writes only its own entries into `recent.json` (newest first,
   one per kind and path, 40 at most) and only `theme` in `settings.json`, keeping the keys it doesn't know.

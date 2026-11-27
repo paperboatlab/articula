@@ -112,13 +112,16 @@ export function relPath(from: string, to: string): string {
   return [...a.slice(i).map(() => ".."), ...b.slice(i)].join("/");
 }
 
-export function ArticulaTransfer({ mode, kind, omc, api, model, root, hub, pickOut, run, stationWhy, onKind, onDone, onFail, onClose }: {
+export function ArticulaTransfer({ mode, kind, omc, api, model, root, hub, exportsTo, pickOut, run, stationWhy, onKind, onDone, onFail, onClose }: {
   mode: TransferMode; kind?: string;
   omc: OmcClient; api: StudioApi | null; model?: StudioModel;
   /** The workspace's root: exports go in it (outside a hub, anywhere), imports read from it. */
   root: string;
   /** In a hub: its exports stay in it. */
   hub: boolean;
+  /** An example opened in place (paperboat#75): where its exports go instead (the server's word), as
+   *  nothing is written into it; a relative path is relative to this. */
+  exportsTo?: string;
   /** Change…: the hub's picker or the system's save dialog; a path relative to the root, or absolute. */
   pickOut?: (name: string, types: string[]) => Promise<string | null>;
   run: Run | null; stationWhy?: string;
@@ -189,7 +192,7 @@ export function ArticulaTransfer({ mode, kind, omc, api, model, root, hub, pickO
     const r = await omc.op<{ path: string; notes: string[]; exists?: string }>("transfer", { mode: "export", ...args(k), replace },
       (stage) => setBusy(`${stage[0].toUpperCase()}${stage.slice(1)}…`));
     if (r.exists) return (setTaken({ kind: k, path: r.exists }), false);
-    onDone(`Exported ${r.path}`, r.notes.filter(Boolean).join(" · ") || `into ${root.split("/").pop()}`, "export");
+    onDone(`Exported ${r.path}`, r.notes.filter(Boolean).join(" · ") || `into ${exportsTo ?? root.split("/").pop()}`, "export");
   };
   const importRun = async (k: string) => {
     if (!api || !model) throw new Error("open a model first");
@@ -234,7 +237,8 @@ export function ArticulaTransfer({ mode, kind, omc, api, model, root, hub, pickO
   const place = root.split("/").pop();
   const where = (k: string) => (
     <SettingsSection title="Where">
-      <SettingRow label="Save to" hint={hub ? `In the hub ${place}: an export stays in it; a file there already is replaced when you say so, its earlier version in the hub's history`
+      <SettingRow label="Save to" hint={exportsTo ? `${place} is an example: nothing is written into it. A path here is in ${exportsTo}, or anywhere else on this computer (an absolute path, ~/…)`
+        : hub ? `In the hub ${place}: an export stays in it; a file there already is replaced when you say so, its earlier version in the hub's history`
         : `In ${place}, or anywhere on this computer (an absolute path, ~/…); a file there already is replaced when you say so`}>
         <input className="well transfer-path" aria-label="Save to" value={out(k)} onChange={(e) => up({ out: { ...o.out, [k]: e.target.value } })} />
         {pickOut && <Key size="sm" onClick={() => void pickOut(out(k).split("/").pop()!, exportKinds({ model, run }).find((x) => x.id === k)!.types as string[])

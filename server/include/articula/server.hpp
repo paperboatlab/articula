@@ -18,7 +18,9 @@
 //                                                  workspace, none: default_workspace()); one from outside switches
 //                                                  the workspace to its hub or folder. No file: the model the server
 //                                                  was started on while its workspace is open, else {file: null}
-//   workspace {}                                → {kind: "folder"|"hub"|null, root, name, hub?}  what it works in
+//   workspace {}                                → {kind: "folder"|"hub"|null, root, name, hub?, example?}  what it works in;
+//                                                  `example` {id, name, exports, cache} when it is one, read-only
+//                                                  (paperboat#75): every write under an example is refused
 //   open_folder {path}                          → workspace          Open folder… (~ allowed); a hub's folder opens the hub
 //   connect   {hub}                             → workspace          Connect to a hub… (an id from `hubs`)
 //   close_workspace {}                          → {kind: null}       Close folder, Close hub: the Start page

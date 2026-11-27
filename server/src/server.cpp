@@ -69,8 +69,47 @@ void close_socket(int fd) { close(fd); }
 std::atomic<bool> stop_requested{false};
 extern "C" void request_stop(int) { stop_requested.store(true, std::memory_order_relaxed); }
 
+// A message for the page. Text that isn't UTF-8 (a log line, a file name) becomes U+FFFD rather than an
+// exception: nlohmann's dump() throws on it, and a throw here ended the server.
+std::string wire(const json& message) { return message.dump(-1, ' ', false, json::error_handler_t::replace); }
+
 std::string status(OmcState state, const std::string& version, const std::string& mode) {
-  return json{{"op", "status"}, {"state", name(state)}, {"version", version}, {"mode", mode}}.dump();
+  return wire(json{{"op", "status"}, {"state", name(state)}, {"version", version}, {"mode", mode}});
+}
+
+bool valid_utf8(std::string_view s) {
+  for (std::size_t i = 0; i < s.size();) {
+    const auto c = static_cast<unsigned char>(s[i]);
+    const std::size_t n = c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2 : (c >> 4) == 0xE ? 3 : (c >> 3) == 0x1E ? 4 : 0;
+    if (n == 0 || i + n > s.size()) return false;
+    for (std::size_t k = 1; k < n; ++k)
+      if ((static_cast<unsigned char>(s[i + k]) >> 6) != 0x2) return false;
+    if (n == 2 && c < 0xC2) return false;  // overlong
+    if (n == 3) {
+      const auto d = static_cast<unsigned char>(s[i + 1]);
+      if ((c == 0xE0 && d < 0xA0) || (c == 0xED && d >= 0xA0)) return false;  // overlong, or a surrogate
+    }
+    if (n == 4) {
+      const auto d = static_cast<unsigned char>(s[i + 1]);
+      if ((c == 0xF0 && d < 0x90) || c > 0xF4 || (c == 0xF4 && d >= 0x90)) return false;
+    }
+    i += n;
+  }
+  return true;
+}
+
+// A .mo file as text for the editor: UTF-8, as the Modelica specification has it; a file that isn't (an older
+// library's Latin-1) is read as Latin-1, so its é shows, and is saved back as UTF-8.
+std::string as_utf8(std::string bytes) {
+  if (valid_utf8(bytes)) return bytes;
+  std::string out;
+  out.reserve(bytes.size() + bytes.size() / 8);
+  for (const char ch : bytes) {
+    const auto c = static_cast<unsigned char>(ch);
+    if (c < 0x80) out += ch;
+    else out += static_cast<char>(0xC0 | (c >> 6)), out += static_cast<char>(0x80 | (c & 0x3F));
+  }
+  return out;
 }
 
 ix::HttpResponsePtr respond(int code, const std::string& type, std::string body) {
@@ -673,7 +712,7 @@ json op_read_file(const json& in) {
   if (file.extension() != ".mo") throw std::runtime_error("only .mo files can be read");
   std::ifstream source(file);
   if (!source) throw std::runtime_error("no file " + file.string());
-  return {{"text", std::string((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>())}};
+  return {{"text", as_utf8(std::string((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>()))}};
 }
 
 // Move a class file into another package, rewriting its `within` and both package.order files.
@@ -811,7 +850,7 @@ json op_generate(Omc& omc, const json& in, const Session& session) {
   const json id = in.value("id", json());
   if (session.push)
     o.progress = [&](std::string_view stage, double fraction) {
-      session.push(json{{"op", "progress"}, {"id", id}, {"stage", stage}, {"fraction", fraction}}.dump());
+      session.push(wire(json{{"op", "progress"}, {"id", id}, {"stage", stage}, {"fraction", fraction}}));
     };
   const GenerateResult r = generate(omc, o);
   json out{{"model", r.model}, {"path", r.path}, {"reason", r.reason}, {"out", r.out.string()}, {"notices", r.notices}};
@@ -1126,13 +1165,13 @@ json op_export(Omc& omc, const json& in, const Session& session) {
   g["out"] = dir.string();
   g["dry"] = false;
   json out = op_generate(omc, g, session);
-  if (session.push) session.push(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", "build"}, {"fraction", 0.8}}.dump());
+  if (session.push) session.push(wire(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", "build"}, {"fraction", 0.8}}));
   const fs::path log = dir.string() + ".log";
   if (mode == "pst") {
     const fs::path pst = dir.string() + ".pst";
     // pack verifies first, and the catalog check builds a C++ station: minutes on a cold build/
     const auto say = [&](const std::string& line) {
-      if (session.push && !line.empty()) session.push(json{{"op", "log"}, {"level", "info"}, {"text", line}}.dump());
+      if (session.push && !line.empty()) session.push(wire(json{{"op", "log"}, {"level", "info"}, {"text", line}}));
     };
     const int code = run_paperboat_streaming({"pack", dir.string(), "--out", pst.string(), "--json-stream"}, log, [&](const std::string& line) {
       // its JSON-stream lines are progress, not prose: show the readable milestones only
@@ -1294,7 +1333,7 @@ json op_simulate(Omc& omc, const json& in, const Session& session) {
       const std::string stage = std::any_of(procs.begin(), procs.end(), [](const RunProc& p) { return p.simulator; }) ? "simulating"
                                 : procs.empty() ? said : "compiling";
       if (!stage.empty() && stage != said) {
-        session.push(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", stage}, {"fraction", 0}}.dump());
+        session.push(wire(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", stage}, {"fraction", 0}}));
         said = stage;
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(150));
@@ -1641,7 +1680,7 @@ json paperboat_json(const std::string& args, const std::string& what) {
     throw std::runtime_error("paperboat " + what + " failed; is paperboat on PATH or PAPERBOAT_BIN set?");
   }
   if (!out.is_object()) throw std::runtime_error("paperboat " + what + " failed");
-  if (out.contains("error")) throw std::runtime_error(out["error"].is_string() ? out["error"].get<std::string>() : out["error"].dump());
+  if (out.contains("error")) throw std::runtime_error(out["error"].is_string() ? out["error"].get<std::string>() : wire(out["error"]));
   return out;
 }
 
@@ -1906,7 +1945,7 @@ json op_open(Omc& omc, const json& in, const Session& session) {
     work_in(omc, now);
   }
   const std::string model = load_file(omc, file, [&](const char* stage) {
-    if (session.push) session.push(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", stage}, {"fraction", 0}}.dump());
+    if (session.push) session.push(wire(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", stage}, {"fraction", 0}}));
   });
   remember("file", file, now.hub);
   return {{"file", file.string()}, {"model", model}, {"workspace", place_json(now)}};
@@ -2050,7 +2089,7 @@ nlohmann::json transfer_export(Omc& omc, const nlohmann::json& in, const fs::pat
   if (fs::exists(out) && !in.value("replace", false)) return {{"exists", shown()}};
   fs::create_directories(out.parent_path());
   const auto stage = [&](const char* s) {
-    if (session.push) session.push(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", s}, {"fraction", 0}}.dump());
+    if (session.push) session.push(wire(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", s}, {"fraction", 0}}));
   };
   const auto copy = [&](const fs::path& from) { fs::copy_file(from, out, fs::copy_options::overwrite_existing); };
   json notes = json::array();
@@ -2156,7 +2195,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
   try {
     in = json::parse(message);
   } catch (const json::exception&) {
-    return json{{"ok", false}, {"error", "not JSON"}}.dump();
+    return wire(json{{"ok", false}, {"error", "not JSON"}});
   }
   json out{{"id", in.value("id", json())}};
   const std::string op = in.value("op", "");
@@ -2164,7 +2203,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
   if (op == "cancel") {
     out["ok"] = true;
     out["result"] = op_cancel(omc);
-    return out.dump();
+    return wire(out);
   }
   // A client asking for getErrorString wants the messages from the previous operation, which
   // the log drain already read. Everything else starts a fresh read.
@@ -2179,7 +2218,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       if (!allowed(expr)) {
         out["ok"] = false;
         out["error"] = "not allowed: " + expr.substr(0, expr.find('(')) + " (Studio may call only the articula/0 allow-list)";
-        return out.dump();
+        return wire(out);
       }
       out["result"] = omc.call(expr);
     } else if (op == "open") {
@@ -2272,7 +2311,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
     } else {
       out["ok"] = false;
       out["error"] = "unknown op; articula/0 has omc, open, workspace, open_folder, connect, close_workspace, tree, recent, recent_forget, settings, settings_write, config, config_write, about, hubs, hub_files, hub_new, hub_open_malachite, open_simplicial, manage_runtimes, examples, example_open, example_copy, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
-      return out.dump();
+      return wire(out);
     }
     out["ok"] = true;
   } catch (const std::exception& e) {
@@ -2293,7 +2332,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       // omc failed: the reply already says so
     }
   }
-  return out.dump();
+  return wire(out);
 }
 
 fs::path default_workspace() {
@@ -2358,7 +2397,7 @@ int serve_articula(int port, const fs::path& app, Omc::Options options, const fs
     if (!message.file.empty()) one["file"] = message.file;
     if (message.line > 0) one["line"] = message.line;
     if (message.column > 0) one["column"] = message.column;
-    const std::string text = one.dump();
+    const std::string text = wire(one);
     std::lock_guard lock(mutex);
     for (auto* ws : std::set<ix::WebSocket*>(clients)) ws->sendText(text);
   });

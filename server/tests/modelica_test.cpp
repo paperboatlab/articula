@@ -68,6 +68,7 @@ TEST_CASE("articula/0 passes only allow-listed calls", "[modelica]") {
   CHECK(mo::allowed("getClassNames()"));
   CHECK(mo::allowed("getClassNames(recursive=true)"));
   CHECK(mo::allowed(R"(loadFile("/tmp/a b;c.mo"))"));
+  CHECK(mo::allowed("getSimulationOptions(M)"));  // Simulate starts from experiment(StopTime)
   CHECK(mo::allowed("addComponent(r1, Modelica.Electrical.Analog.Basic.Resistor, M, "
                     "annotate=Placement(transformation(extent={{-10,-10},{10,10}})))"));
   CHECK_FALSE(mo::allowed(R"(system("ls"))"));
@@ -601,6 +602,12 @@ end Decay;
   const json opened = op(omc, {{"id", 1}, {"op", "open"}, {"file", file.string()}}, session);
   REQUIRE(opened["ok"] == true);
   CHECK(opened["result"]["model"] == "Decay");
+  // the open says its steps for the splash: omc's session, (the MSL when not loaded yet,) the file
+  REQUIRE(pushed.size() >= 2);
+  CHECK(pushed.front()["id"] == 1);
+  CHECK(pushed.front()["stage"] == "omc");
+  CHECK(pushed.back()["stage"] == "file");
+  pushed.clear();
 
   const json icon = op(omc, {{"id", 2}, {"op", "icon"}, {"class", "Modelica.Electrical.Analog.Basic.Resistor"}}, session);
   REQUIRE(icon["ok"] == true);

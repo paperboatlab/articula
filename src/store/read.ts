@@ -154,6 +154,8 @@ export async function readModel(omc: OmcCalls, name: string, file: string | unde
   const params = await readParams(omc, name, decl);
   const values = new Map(params.map((p) => [p.id, String(p.default)]));
   for (const v of vars) if (values.has(v.name)) v.value = values.get(v.name);
+  // getSimulationOptions: {startTime, stopTime, tolerance, numberOfIntervals, interval}
+  const stopTime = Number(atom(list(parseValue(await omc.call(`getSimulationOptions(${name})`).catch(() => "{}")))[1]));
   const own = await omc.op<{ icon?: StudioModel["icon"]; connectors?: StudioModel["connectors"] }>("icon", { class: name }).catch(() => ({}) as { icon?: StudioModel["icon"] });
   return {
     name,
@@ -166,6 +168,7 @@ export async function readModel(omc: OmcCalls, name: string, file: string | unde
     ...(own.icon ? { icon: own.icon } : {}),
     connectors,
     ...(undrawn.total ? { undrawn } : {}),
+    ...(stopTime > 0 ? { stopTime } : {}),
   };
 }
 

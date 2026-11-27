@@ -58,7 +58,7 @@ flowchart LR
   (File › Settings… Ctrl ,; Help › Keyboard shortcuts Ctrl / opens it on Shortcuts): General (the theme,
   `settings.json`'s), Articula (omc, libraries, solver, export), Editor (`EditorSettingsPane`, `articula.toml`),
   Hub (in a hub), Shortcuts (`ShortcutList` over the command registry);
-  `src/shell/`: the cards and dialogs (`Rail` Files/Library, `StudioConsole`, `Opening` the kit's Splash,
+  `src/shell/`: the cards and dialogs (`Rail` Files/Library, `StudioConsole`, `Opening` the kit's Splash over the steps an open waits on (the `open` op's progress: omc, library, file; then reading),
   `menus.ts`).
 - `src/store/`: `useStudioStore`, the `StudioApi` the views share (omc is the only source of truth: an
   edit is omc calls, then the model is read again); `src/omc/omc.ts` the `articula/0` client.

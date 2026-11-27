@@ -93,3 +93,12 @@ test("export: defaultExportFolder formats model name correctly", () => {
   assert.equal(defaultExportFolder("Modelica.Electrical.Analog.Basic.Resistor"), "resistor-cpp");
   assert.equal(defaultExportFolder("CartPole"), "cart-pole-cpp");
 });
+
+test("the opening splash says each step the first open waits on (#3)", async () => {
+  const { openingWords } = await import("../src/shell/Opening.tsx");
+  const up = { state: "checking" as const, version: "OpenModelica 1.27.1~dev", mode: "podman" };
+  assert.deepEqual(openingWords({ state: "checking", version: "" }, { step: "omc" }, ""), { say: "Starting OpenModelica", detail: "paperboatd · the omc runtime" });
+  assert.deepEqual(openingWords(up, { step: "library" }, ""), { say: "Loading the Modelica Standard Library", detail: "omc 1.27.1 · podman" });
+  assert.equal(openingWords(up, { step: "read", model: "P.DCMotor", file: "/w/P/DCMotor.mo" }, "").say, "Reading DCMotor");
+  assert.equal(openingWords(up, { step: "file" }, "no class in x.mo").say, "The model didn't open");
+});

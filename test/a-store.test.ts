@@ -222,6 +222,7 @@ function fake(): OmcCalls {
     [/^getParameterNames\(/, '{"k", "h"}'],
     [/^getParameterValue\(M, "h"\)/, '"3"'],
     [/^getParameterValue\(M, "k"\)/, '"2.5"'],
+    [/^getSimulationOptions\(M\)/, "{0.0, 3.0, 1e-06, 500, 0.006}"],
   ];
   return {
     async call(expr: string) {
@@ -253,6 +254,7 @@ test("reading a model: parts with place, modifiers and ports, wires, top-level p
   ]);
   assert.ok(m.connectors.PositivePin);
   assert.equal(m.undrawn, undefined); // everything the canvas drew is declared as written
+  assert.equal(m.stopTime, 3); // experiment(StopTime = 3), what Simulate starts from (#32)
 });
 
 test("undrawn: protected parts, arrays and conditionals are counted, each part once", async () => {

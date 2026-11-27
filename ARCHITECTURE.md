@@ -37,7 +37,8 @@ flowchart LR
   the network for library downloads). Also the allow-list (`allowed`) and omc's value parser.
 - `server/src/server.cpp`, `include/articula/server.hpp`: the HTTP/WebSocket server (ixwebsocket) and
   every `articula/0` op (open, class files, save, check, icon, set_icon, simulate, cancel, packages,
-  generate/export, the hubs: `hubs` from `paperboat hub list --json`, `hub_files`, `hub_new`,
+  generate/export (`export` serve: `paperboat run` the station; `open_simplicial`: Simplicial's page on it,
+  `?station=ws://localhost:<port>`, from `paperboat app open simplicial --start --no-open --json`), the hubs: `hubs` from `paperboat hub list --json`, `hub_files`, `hub_new`,
   `hub_open_malachite`), and the one file workflow: the workspace (`workspace`, `open_folder`, `connect`,
   `close_workspace`, `tree`; `Omc::set_project` moves the lease with it, and an `open` from outside switches
   to the file's hub or folder first) and the shared store (`recent`, `recent_forget`, `settings`,
@@ -46,7 +47,7 @@ flowchart LR
 - `server/src/icon.cpp`, `connectors.cpp`, `seticon.cpp`: the importer (`Icon(graphics)` → the kit's
   `IconDef`, connectors and their domains; and `icon_art`, the same graphics kept whole, which the `icon`
   op returns as `art`) and its inverse; `generate.cpp`: the station generator
-  (targets the legacy engine until Simplicial is rebuilt).
+  (a C++ station for Simplicial's engine; MultiBody shapes become its `scene` and `scene.patch`).
 - `server/src/main.cpp`: the `articula-server` binary: the server, and `check`, `generate`, `icon`.
 - `src/App.tsx`: the window (REBRAND: the kit's `.win > .bar`, the frame (the bar, Files/Library and Simulate one surface, the stage and the console in the kit's `.bay`), the kit's `EditorTabs` for the
   open models and `RuntimesKey` for omc, the Panels key, Ctrl K, menus from the command registry, the

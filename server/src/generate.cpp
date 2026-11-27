@@ -1335,8 +1335,8 @@ Multibody multibody_shapes(Omc& omc, const std::string& model, const std::string
   return m;
 }
 
-std::string ok_call(Omc& omc, const std::string& expr) {
-  std::string out = omc.call(expr);
+std::string ok_call(Omc& omc, const std::string& expr, std::optional<std::chrono::milliseconds> timeout = {}) {
+  std::string out = timeout ? omc.call(expr, *timeout) : omc.call(expr);
   if (out == "false" || out.empty()) {
     const std::string e = omc.errors();
     throw GenerateError(expr.substr(0, expr.find('(')) + " failed" + (e.empty() ? "" : ": " + e));
@@ -1562,7 +1562,8 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
     omc.call("setCommandLineOptions(\"--fmiFlags=s:" + o.fmu_solver + "\")");
     const OmValue built = parse_value(ok_call(
         omc, "buildModelFMU(" + r.model + ", version=\"2.0\", fmuType=\"cs\", fileNamePrefix=\"" + spec.label +
-                 "\", platforms={\"static\"})"));
+                 "\", platforms={\"static\"})",
+        std::chrono::minutes(10)));  // a compile: a MultiBody FMU takes minutes, not omc's 30 s
     const fs::path fmu_file = built.atom;
     omc.call("setCommandLineOptions(\"--fmiFilter=protected\")");
     if (!fs::is_regular_file(fmu_file)) throw GenerateError("buildModelFMU failed: " + omc.errors());

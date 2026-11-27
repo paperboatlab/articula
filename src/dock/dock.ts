@@ -319,7 +319,7 @@ export function serveLine(mode: ExportMode, r: ExportResult, port?: number): str
   if (mode === "pst") return `${r.file} downloaded · ${r.reason}`;
   if (r.state === "running") return `${r.name ?? "station"} running on port ${r.port}`;
   if (r.state === "exited") return `station on port ${r.port} exited:\n${r.tail ?? r.log ?? ""}`;
-  return `building ${r.name ?? "station"} for port ${r.port}… (the first build compiles the engine: minutes)`;
+  return `building ${r.name ?? "station"} for port ${r.port}… (a first build compiles it: a minute or so)`;
 }
 
 export async function runStationExport(

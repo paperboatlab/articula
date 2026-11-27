@@ -1571,6 +1571,20 @@ void open_app(const std::string& app, const std::string& path) {
 }
 
 // Open <hub> in Malachite.
+// Simplicial's page (started when it isn't running, no window: the page opens one) on a station Articula
+// started: `<its url>?station=ws://localhost:<port>`, which opens on the station's starter.
+json op_open_simplicial(const json& in) {
+  const int port = in.value("port", 0);
+  if (port <= 0) throw std::runtime_error("open_simplicial: the station's port");
+  std::string url;
+  try {
+    url = json::parse(paperboat_output("app open simplicial --start --no-open --json")).value("url", "");
+  } catch (const json::exception&) {
+  }
+  if (url.empty()) throw std::runtime_error("Simplicial isn't installed: paperboat app install simplicial");
+  return {{"url", url + "?station=ws://localhost:" + std::to_string(port)}};
+}
+
 json op_hub_open_malachite(const json& in) {
   const std::string root = in.value("root", "");
   if (root.empty() || !fs::is_directory(root)) throw std::runtime_error("no folder " + root);
@@ -1889,6 +1903,8 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_hub_files(in);
     } else if (op == "hub_new") {
       out["result"] = op_hub_new(in);
+    } else if (op == "open_simplicial") {
+      out["result"] = op_open_simplicial(in);
     } else if (op == "hub_open_malachite") {
       out["result"] = op_hub_open_malachite(in);
     } else if (op == "create_class") {
@@ -1927,7 +1943,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in, session);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; articula/0 has omc, open, workspace, open_folder, connect, close_workspace, tree, recent, recent_forget, settings, settings_write, config, config_write, about, hubs, hub_files, hub_new, hub_open_malachite, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
+      out["error"] = "unknown op; articula/0 has omc, open, workspace, open_folder, connect, close_workspace, tree, recent, recent_forget, settings, settings_write, config, config_write, about, hubs, hub_files, hub_new, hub_open_malachite, open_simplicial, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
       return out.dump();
     }
     out["ok"] = true;
@@ -1940,7 +1956,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
   // read or write files never start omc for it (the Start page needs none), nor does `open` with nothing to open.
   static const std::set<std::string> disk_only = {"workspace", "open_folder", "connect", "close_workspace", "tree", "recent",
                                                   "recent_forget", "settings", "settings_write", "config", "config_write", "about",
-                                                  "git", "hubs", "hub_files", "hub_new", "hub_open_malachite"};
+                                                  "git", "hubs", "hub_files", "hub_new", "hub_open_malachite", "open_simplicial"};
   if (!errors_read && !disk_only.contains(op) && !omc.version().empty()) {  // a never-started omc has said nothing
     try {
       if (omc.last_messages().empty()) omc.messages();

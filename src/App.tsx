@@ -12,7 +12,7 @@ import { helpCommand, SEARCH_CHORD, useShortcuts, type Command } from "@paperboa
 import { omHelp } from "./shell/help.ts";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { ConnectHub, OpenFile, SaveFile, type Hub } from "@paperboatlab/ui/hub";
-import { AskOpen, baseName, fileMenu, parseRecent, parseSettings, recentFor, recentMenu, shell, Start, TypedPath, Unsaved, when, WorkspaceWell, type RecentEntry, type Workspace as Place } from "@paperboatlab/ui/workspace";
+import { AskOpen, baseName, fileMenu, parseRecent, parseSettings, recentFor, recentMenu, shell, Start, TypedPath, Unsaved, useOpening, when, WorkspaceWell, type Opening as OpeningState, type RecentEntry, type Workspace as Place } from "@paperboatlab/ui/workspace";
 import type { FileEntry } from "@paperboatlab/ui/files";
 import { useAppConfig as useSqueroConfig, type ConfigStore } from "@paperboatlab/ui/editor";
 import { Canvas } from "./canvas/Canvas.tsx";
@@ -224,6 +224,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   // The hubs (paperboat#16), read on start and whenever they are offered; null without Malachite (no
   // Malachite, no hub words).
   const [hubs, setHubs] = useState<AppHub[] | null>(null);
+  const opener = useOpening();   // a folder or hub on its way: Start, the well and Connect to a hub say so
   const malachite = hubs !== null;
   const readHubs = useCallback(() => omc.op<AppHub[] | null>("hubs").then((h) => setHubs(Array.isArray(h) ? h : null), () => setHubs(null)), [omc]);
   useEffect(() => void readHubs(), [readHubs]);
@@ -391,20 +392,24 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     model && fileDirty ? setUnsaved({ closing, then }) : void then(true);
   const closing = place?.kind === "hub" ? "the hub" : "the folder";
   /** Open folder, Connect, Close: the server switches; the model in the old workspace goes (asked first). */
-  const switchPlace = (go: () => Promise<Place | { kind: null }>) => guard(closing, async () => {
-    try {
+  // `what`: the folder or hub on its way: Start, the well and Connect to a hub say so until it is open
+  const switchPlace = (what: Omit<OpeningState, "error" | "detail"> | null, go: () => Promise<Place | { kind: null }>) => guard(closing, async () => {
+    const work = async () => {
       const w = await go();
       const next = w.kind ? w as Place : null;
       applyPlace(next);
       if (model?.file && !(next && inside(model.file, next.root))) actions.close();
+    };
+    try {
+      await (what ? opener.open(what, work) : work());
     } catch (e) {
       fail(e as Error, "Couldn't open it");
       void readRecent();
     }
   });
-  const openFolder = (path: string) => switchPlace(() => omc.op("open_folder", { path }));
-  const connect = (id: string) => switchPlace(() => omc.op("connect", { hub: id }));
-  const closePlace = () => switchPlace(() => omc.op("close_workspace"));
+  const openFolder = (path: string) => switchPlace({ name: baseName(path), path }, () => omc.op("open_folder", { path }));
+  const connect = (id: string) => switchPlace({ name: hubs?.find((h) => h.id === id)?.name ?? "the hub", hub: id }, () => omc.op("connect", { hub: id }));
+  const closePlace = () => switchPlace(null, () => omc.op("close_workspace"));
   const pickFolder = () => {
     const sh = shell();
     if (!sh) return setAsk("folder");
@@ -467,7 +472,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const openRecent = (e: RecentEntry) => {
     if (e.kind === "file") return void openDocument(e.path);
     const go = e.kind === "hub" && e.hub ? () => omc.op<Place>("connect", { hub: e.hub }) : () => omc.op<Place>("open_folder", { path: e.path });
-    switchPlace(() => go().catch(async (err: Error) => {
+    switchPlace(e.kind === "hub" && e.hub ? { name: baseName(e.path), hub: e.hub } : { name: baseName(e.path), path: e.path }, () => go().catch(async (err: Error) => {
       if (!/^no hub/.test(err.message)) await omc.op("recent_forget", { kind: e.kind, path: e.path }).catch(() => undefined);
       throw err;
     }));
@@ -874,7 +879,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           <span className="lk"><AppMark app="articula" size={26} idle={!live} label="Articula" /><span className="wm">Articula</span></span>
           <MenuBar commands={commands} menus={MENUS} />
           {place && (
-            <WorkspaceWell workspace={place} home={home} recent={recentItems} hubs={hubs ?? []} onOpenFolder={pickFolder} onConnect={openConnect}
+            <WorkspaceWell workspace={place} home={home} recent={recentItems} hubs={hubs ?? []} opening={opener.opening} onOpenFolder={pickFolder} onConnect={openConnect}
               onClose={closePlace} onSwitchHub={connect} onNewHub={newHub} onOpenInMalachite={openInMalachite} onUseFolder={pickFolder} />
           )}
           <span className="bend">
@@ -899,7 +904,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           <main className="ws">
             <div className="mid bay start-bay">
               <div className="panel start-card">
-                <Start app="Articula" noun="model" nouns="models" hubs={malachite} recent={recent} home={home}
+                <Start app="Articula" noun="model" nouns="models" hubs={malachite} recent={recent} home={home} opening={opener.opening}
                   onOpenFolder={pickFolder} onOpenFile={openFile} onNew={() => commands.find((c) => c.id === "file.new")?.run()} onConnect={openConnect}
                   onRecent={openRecent} onDrop={onDrop} />
               </div>
@@ -1027,7 +1032,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         )}
 
         {ask === "open" && <AskOpen what="a model" types={["mo"]} hubs={hubs?.length ?? 0} onLocal={() => (setAsk(null), pickLocal())} onConnect={openConnect} onClose={() => setAsk(null)} />}
-        {ask === "connect" && hubs && <ConnectHub app="Articula" hubs={hubs} onConnect={(id) => (setAsk(null), connect(id))} onNew={() => (setAsk(null), newHub())} onClose={() => setAsk(null)} />}
+        {ask === "connect" && hubs && <ConnectHub app="Articula" hubs={hubs} opening={opener.opening} onConnect={(id) => (setAsk(null), connect(id))} onNew={() => (setAsk(null), newHub())} onClose={() => setAsk(null)} />}
         {ask === "pickOpen" && place && hub && (
           <OpenFile what="a model" types={["mo"]} kinds="Models" hub={hub} list={() => omc.op<FileEntry[]>("hub_files", { root: place.root })} describe={describeFile}
             onClose={() => setAsk(null)} onOpen={(path) => (setAsk(null), void openDocument(`${place.root}/${path}`))} />

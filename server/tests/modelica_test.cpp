@@ -91,6 +91,28 @@ TEST_CASE("articula/0 passes only allow-listed calls", "[modelica]") {
   CHECK(mo::handle(omc, R"({"id": 7, "op": "nope"})").find("unknown op") != std::string::npos);
 }
 
+TEST_CASE("the text editor reads a .mo as UTF-8; a Latin-1 one shows, and never ends the server", "[server]") {
+  mo::Omc omc;  // never started: read_file only reads the disk
+  const auto dir = fs::temp_directory_path() / "articula_utf8_test";
+  fs::create_directories(dir);
+  const auto read = [&](const std::string& name, const std::string& bytes) {
+    std::ofstream(dir / name, std::ios::binary) << bytes;
+    const json in{{"id", 1}, {"op", "read_file"}, {"file", (dir / name).string()}};
+    return json::parse(mo::handle(omc, in.dump()));
+  };
+  const std::string utf8 = "model U \"Temp\xC3\xA9rature \xE2\x80\x93 \xCE\xA9 \xF0\x9F\x98\x80\"\r\nend U;\r\n";
+  const json u = read("U.mo", "\xEF\xBB\xBF" + utf8);  // a BOM, CRLF and an emoji: kept byte for byte
+  REQUIRE(u["ok"] == true);
+  CHECK(u["result"]["text"] == "\xEF\xBB\xBF" + utf8);
+  // Latin-1: once a crash (dump() threw on the é), now its text as UTF-8
+  const json l = read("L.mo", "model L \"Temp\xE9rature \xB0" "C\"\nend L;\n");
+  REQUIRE(l["ok"] == true);
+  CHECK(l["result"]["text"] == "model L \"Temp\xC3\xA9rature \xC2\xB0" "C\"\nend L;\n");
+  // a stray byte that isn't valid UTF-8 after a valid sequence: still Latin-1, never half of each
+  CHECK(read("M.mo", "\xC3\xA9\xFF")["result"]["text"] == "\xC3\x83\xC2\xA9\xC3\xBF");
+  fs::remove_all(dir);
+}
+
 TEST_CASE("an export stays in a hub, sets only name = number", "[transfer]") {
   mo::Omc omc;  // never started: each refusal comes before omc is asked
   const auto root = std::filesystem::temp_directory_path() / "articula_transfer_test";

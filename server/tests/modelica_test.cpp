@@ -512,7 +512,8 @@ struct Store {
     fs::create_directories(hub);
     const fs::path bin = home.parent_path() / "paperboat";
     std::ofstream(bin) << "#!/bin/sh\n[ \"$1 $2\" = \"hub list\" ] && echo '[{\"id\": \"h1\", \"name\": \"tank-lab\", \"path\": \"" << hub.string()
-                       << "\", \"place\": \"local\", \"shown\": \"~/hubs/tank-lab\"}]'\n";
+                       << "\", \"place\": \"local\", \"shown\": \"~/hubs/tank-lab\"}]'\n"
+                       << "[ \"$1 $2 $3\" = \"app open simplicial\" ] && echo '{\"app\": \"simplicial\", \"url\": \"http://127.0.0.1:30471/\"}'\n";
     fs::permissions(bin, fs::perms::owner_all);
     setenv("PAPERBOAT_HOME", home.c_str(), 1);
     setenv("PAPERBOAT_BIN", bin.c_str(), 1);
@@ -1025,6 +1026,15 @@ TEST_CASE("no Malachite, no hubs: the list is null, not empty", "[articula]") {
   setenv("PAPERBOAT_BIN", "/nonexistent/paperboat", 1);
   CHECK(op(omc, {{"op", "hubs"}})["result"] == nullptr);
   CHECK(op(omc, {{"op", "connect"}, {"hub", "h1"}})["ok"] == false);
+}
+
+TEST_CASE("open_simplicial: Simplicial's page on a started station, or why not", "[articula]") {
+  const Store store;
+  mo::Omc omc;
+  CHECK(op(omc, {{"op", "open_simplicial"}, {"port", 52431}})["result"]["url"] == "http://127.0.0.1:30471/?station=ws://localhost:52431");
+  CHECK(op(omc, {{"op", "open_simplicial"}})["ok"] == false);  // no port
+  setenv("PAPERBOAT_BIN", "/nonexistent/paperboat", 1);
+  CHECK_THAT(op(omc, {{"op", "open_simplicial"}, {"port", 52431}})["error"].get<std::string>(), Catch::Matchers::ContainsSubstring("paperboat app install simplicial"));
 }
 
 TEST_CASE("settings.json holds the theme every app starts in", "[articula]") {

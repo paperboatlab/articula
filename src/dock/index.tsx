@@ -161,6 +161,23 @@ export function StudioDock({
       ws?.close();
     };
   }, [probePort]);
+  // Ready: Simplicial opens on it (its starter), and again from the key.
+  const openSimplicial = (port: number) =>
+    void omc.op<{ url: string }>("open_simplicial", { port }).then((r) => window.open(r.url, "Simplicial"), (e: Error) => onLog?.(e.message, "error"));
+  const readyPort = running?.ready ? running.port : null;
+  useEffect(() => {
+    if (readyPort) openSimplicial(readyPort);
+  }, [readyPort]); // eslint-disable-line react-hooks/exhaustive-deps -- once per started station
+
+  const handleStop = async () => {
+    if (!running || busy) return;
+    setBusy(true);
+    const res = await runStationExport(api, "stop", () => {}, running.port);
+    setOutcome(res);
+    if (res.ok) setRunning(null);
+    setBusy(false);
+  };
+
   // While it builds, paperboat's own stage and clock (pb#332), else the log's last line.
   const STAGE: Record<string, string> = { prepare: "preparing", configure: "configuring", compile: "compiling", waiting: "starting" };
   const stationWords = !running
@@ -173,7 +190,7 @@ export function StudioDock({
       ? `building for :${running.port}${running.line ? `: ${running.line.slice(0, 90)}` : "…"}`
       : !running.ready
         ? `started on :${running.port}, waiting for it to answer…`
-        : `ready: connect Paperboat to ws://localhost:${running.port}`;
+        : `running in Simplicial on :${running.port}`;
 
   return (
     <div className="studio-dock" role="region" aria-label="Model balance and export" data-own-keys>
@@ -234,7 +251,25 @@ export function StudioDock({
           >
             Download .pst
           </button>
-          {/* ponytail: "Start station" ran the legacy engine; it returns with Simplicial on the new platform */}
+          <button
+            type="button"
+            className="studio-dock-export-key"
+            disabled={!isBalanced || busy || !canExport}
+            title={!canExport ? why : isBalanced ? "Build the station, start it and open it in Simplicial" : balance.words}
+            onClick={() => void handleExport("serve")}
+          >
+            {running ? "Restart" : "Start in Simplicial"}
+          </button>
+          {running?.ready && (
+            <button type="button" className="studio-dock-export-key" disabled={busy} title="Open the running station in Simplicial again" onClick={() => openSimplicial(running.port)}>
+              Open
+            </button>
+          )}
+          {running && (
+            <button type="button" className="studio-dock-export-key" disabled={busy} title="Stop the station" onClick={() => void handleStop()}>
+              Stop :{running.port}
+            </button>
+          )}
         </div>
       </div>
 

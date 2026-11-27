@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { byMenu } from "@paperboatlab/ui";
-import { type Command } from "@paperboatlab/ui";
+import { exampleCommands, type Command } from "@paperboatlab/ui";
 import { StringStream, type StreamParser } from "@codemirror/language";
 import { cpp } from "@codemirror/legacy-modes/mode/clike";
-import { MENUS } from "../src/shell/menus.ts";
+import { commandItems, MENUS } from "../src/shell/menus.ts";
 
 /** What the read-only views colour: each token's text and style, through the editor's own stream parser. */
 function tokenize<S>(code: string, parser: StreamParser<S>): { type: string; text: string }[] {
@@ -101,4 +101,18 @@ test("the opening splash says each step the first open waits on (#3)", async () 
   assert.deepEqual(openingWords(up, { step: "library" }, ""), { say: "Loading the Modelica Standard Library", detail: "omc 1.27.1 · podman" });
   assert.equal(openingWords(up, { step: "read", model: "P.DCMotor", file: "/w/P/DCMotor.mo" }, "").say, "Reading DCMotor");
   assert.equal(openingWords(up, { step: "file" }, "no class in x.mo").say, "The model didn't open");
+});
+
+test("Ctrl K: Open example: <name> for each example, in no menu, Enter opens it (paperboat#72)", () => {
+  const opened: string[] = [];
+  const examples = [{ id: "modelica/05-double-pendulum", app: "articula", kind: "modelica", name: "05 Double pendulum", description: "", path: "/ex/modelica/05-double-pendulum" }];
+  const commands: Command[] = [
+    { id: "view.search", label: "Command search…", menu: "view", group: "search", quiet: true, run: () => {} },
+    ...exampleCommands(examples, (id) => opened.push(id)),
+  ];
+  const items = commandItems(commands).filter((i) => i.label.toLowerCase().includes("example"));
+  assert.deepEqual(items.map((i) => i.label), ["Open example: 05 Double pendulum"]);
+  assert.ok(!MENUS.some((m) => m.id === commands[1].menu), "examples show only in Ctrl K");
+  items[0].run();
+  assert.deepEqual(opened, ["modelica/05-double-pendulum"]);
 });

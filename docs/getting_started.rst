@@ -29,6 +29,11 @@ Your first model
 Select a part and press :kbd:`F1` to read its class's documentation. :kbd:`Ctrl K` searches the
 commands and the workspace's classes.
 
+To start from a working model, type ``example`` in :kbd:`Ctrl K`: **Open example: <name>** lists
+Paperboat's Modelica examples (``paperboat example list --app articula``) and opens your own copy of one
+in a new window (``paperboat example open <id>``, copied once into ``$PAPERBOAT_HOME/examples``).
+Without the Paperboat CLI the list is empty.
+
 The workspace
 -------------
 

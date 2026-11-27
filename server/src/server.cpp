@@ -1593,6 +1593,35 @@ json op_manage_runtimes() {
   return json::object();
 }
 
+// The examples (paperboat#72): paperboat-examples' `modelica/` group, `[{id, name, description, path, …}]`
+// for Ctrl K's Open example: <name>; [] without paperboat or when it fails (Articula works without it).
+json op_examples() {
+  try {
+    json list = json::parse(paperboat_output("example list --app articula --json"));
+    return list.is_array() ? list : json::array();
+  } catch (const json::exception&) {
+    return json::array();
+  }
+}
+
+// Open example: `paperboat example open <id>` copies it once into $PAPERBOAT_HOME/examples and opens
+// that copy in a new window; its entry, or why not.
+json op_example_open(const json& in) {
+  const std::string id = in.value("id", "");
+  // the id goes through a shell (paperboat_output): plain path words only
+  if (id.empty() || id[0] == '-' || id.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/-") != std::string::npos)
+    throw std::runtime_error("no example " + id);
+  json out;
+  try {
+    out = json::parse(paperboat_output("example open " + id + " --json"));
+  } catch (const json::exception&) {
+    throw std::runtime_error("paperboat example open failed; is paperboat on PATH or PAPERBOAT_BIN set?");
+  }
+  if (!out.is_object()) throw std::runtime_error("paperboat example open failed");
+  if (out.contains("error")) throw std::runtime_error(out["error"].is_string() ? out["error"].get<std::string>() : out["error"].dump());
+  return out;
+}
+
 // ── The workspace (plans/2026-11-26_11-05_one_file_workflow.md): a folder, a hub, or none (the Start
 // page), switched at runtime; omc's lease follows it (its project). One per server, shared by its pages.
 
@@ -2154,6 +2183,10 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_hub_open_malachite(in);
     } else if (op == "manage_runtimes") {
       out["result"] = op_manage_runtimes();
+    } else if (op == "examples") {
+      out["result"] = op_examples();
+    } else if (op == "example_open") {
+      out["result"] = op_example_open(in);
     } else if (op == "create_class") {
       out["result"] = op_create_class(in);
     } else if (op == "new_package") {
@@ -2194,7 +2227,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in, session);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; articula/0 has omc, open, workspace, open_folder, connect, close_workspace, tree, recent, recent_forget, settings, settings_write, config, config_write, about, hubs, hub_files, hub_new, hub_open_malachite, open_simplicial, manage_runtimes, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
+      out["error"] = "unknown op; articula/0 has omc, open, workspace, open_folder, connect, close_workspace, tree, recent, recent_forget, settings, settings_write, config, config_write, about, hubs, hub_files, hub_new, hub_open_malachite, open_simplicial, manage_runtimes, examples, example_open, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
       return out.dump();
     }
     out["ok"] = true;
@@ -2208,7 +2241,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
   static const std::set<std::string> disk_only = {"workspace", "open_folder", "connect", "close_workspace", "tree", "recent",
                                                   "recent_forget", "settings", "settings_write", "config", "config_write", "about",
                                                   "git", "hubs", "hub_files", "hub_new", "hub_open_malachite", "open_simplicial", "read_data",
-                                                  "manage_runtimes"};
+                                                  "manage_runtimes", "examples", "example_open"};
   if (!errors_read && !disk_only.contains(op) && !omc.version().empty()) {  // a never-started omc has said nothing
     try {
       if (omc.last_messages().empty()) omc.messages();

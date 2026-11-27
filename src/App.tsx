@@ -8,7 +8,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { About, AppMark, Icon, Key, MenuBar, Notifications, Panel, PanelsKey, RuntimesKey, Search, Segmented, ScaleSetting, SettingRow, Settings, SettingsSection, ShortcutList, Split as Gutter, ThemeSetting, Toasts, WindowKeys, isScale, readStored, useScale, useToasts, writeStored, type PaneRect, type Scale, type SearchItem, type Theme } from "@paperboatlab/ui";
 import { HelpWindow } from "@paperboatlab/ui";
 import { afterClose, EditorSettingsPane, EditorTabs, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
-import { helpCommand, SEARCH_CHORD, transferMenu, useShortcuts, type Command, type TransferMode } from "@paperboatlab/ui";
+import { exampleCommands, helpCommand, SEARCH_CHORD, transferMenu, useShortcuts, type Command, type Example, type TransferMode } from "@paperboatlab/ui";
 import { ArticulaTransfer, exportKinds, importKinds, type Run as TransferRun } from "./transfer/Transfer.tsx";
 import { omHelp } from "./shell/help.ts";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
@@ -28,7 +28,7 @@ import { ComponentPopover } from "./popover/index.tsx";
 import { InterfaceSheet } from "./sheet/index.tsx";
 import { IconView } from "./icon/IconView.tsx";
 import { ConfirmModal, LibraryModal, PromptModal } from "./shell/Dialogs.tsx";
-import { MENUS } from "./shell/menus.ts";
+import { commandItems, MENUS } from "./shell/menus.ts";
 import { STUDIO_VERSION } from "./version.ts";
 import { THEMES, useTheme } from "@paperboatlab/ui";
 import { Opening } from "./shell/Opening.tsx";
@@ -241,6 +241,9 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const malachite = hubs !== null;
   const readHubs = useCallback(() => omc.op<AppHub[] | null>("hubs").then((h) => setHubs(Array.isArray(h) ? h : null), () => setHubs(null)), [omc]);
   useEffect(() => void readHubs(), [readHubs]);
+  // Ctrl K's Open example: <name> (paperboat#72): paperboat-examples' Modelica ones, read once; [] without Paperboat
+  const [examples, setExamples] = useState<Example[]>([]);
+  useEffect(() => void omc.op<Example[]>("examples").then((l) => setExamples(Array.isArray(l) ? l : []), () => {}), [omc]);
   const classes = useClassIndex(omc);
 
   const model = api?.model;
@@ -859,12 +862,13 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     { id: "help.shortcuts", label: "Keyboard shortcuts", menu: "help", group: "help", shortcut: "Ctrl /", chord: { key: "/", ctrl: true },
       enabled: () => !document.activeElement?.closest(".cm-editor"), run: () => setSettingsPage("shortcuts") },
     { id: "about", label: "About Articula", menu: "help", group: "about", run: () => setAboutOpen(true) },
+    ...exampleCommands(examples, (id) => void omc.op("example_open", { id }).catch((e) => fail(e, "Couldn't open the example"))),
   ];
   useShortcuts(commands);
   const helpProvider = useMemo(() => omHelp(omc), [omc]);
 
   const searchItems = useMemo<SearchItem[]>(() => [
-    ...commands.filter((c) => !c.quiet).map((c): SearchItem => ({ id: c.id, label: c.label, group: "Commands", shortcut: c.shortcut, disabled: c.enabled === false, why: c.why, run: c.run })),
+    ...commandItems(commands),
     ...(workspace?.entries ?? []).filter((e) => e.kind === "class").map((e): SearchItem => ({ id: `file:${e.path}`, label: e.name, group: "Files", detail: e.path.slice((workspace?.root.length ?? 0) + 1), run: () => void openDocument(e.path) })),
   ], [commands, workspace]);
   const live = running || status.state === "checking";

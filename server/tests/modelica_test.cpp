@@ -543,6 +543,10 @@ struct Store {
     std::ofstream(bin) << "#!/bin/sh\n[ \"$1 $2\" = \"hub list\" ] && echo '[{\"id\": \"h1\", \"name\": \"tank-lab\", \"path\": \"" << hub.string()
                        << "\", \"place\": \"local\", \"shown\": \"~/hubs/tank-lab\"}]'\n"
                        << "[ \"$1 $2 $3\" = \"app open simplicial\" ] && echo '{\"app\": \"simplicial\", \"url\": \"http://127.0.0.1:30471/\"}'\n"
+                       << "[ \"$*\" = \"example list --app articula --json\" ] && echo '[{\"id\": \"modelica/01-decay\", \"app\": \"articula\", "
+                       << "\"kind\": \"modelica\", \"name\": \"01 Decay\", \"description\": \"exponential decay\", \"path\": \"/ex/modelica/01-decay\"}]'\n"
+                       << "[ \"$*\" = \"example open modelica/01-decay --json\" ] && echo '{\"id\": \"modelica/01-decay\", \"path\": \"/home/modelica/01-decay\", \"session\": \"s1\"}'\n"
+                       << "[ \"$*\" = \"example open modelica/99-none --json\" ] && echo '{\"error\": \"no example modelica/99-none\"}' && exit 2\n"
                        << "[ \"$1\" = launcher ] && echo \"$*\" > " << (home.parent_path() / "launcher-args").string() << "\n";
     fs::permissions(bin, fs::perms::owner_all);
     setenv("PAPERBOAT_HOME", home.c_str(), 1);
@@ -1076,6 +1080,24 @@ TEST_CASE("manage_runtimes: the Launcher on Runtimes › omc, or why not", "[art
   CHECK(args == "launcher --page runtimes --runtime omc");
   setenv("PAPERBOAT_BIN", "/nonexistent/paperboat", 1);
   CHECK(op(omc, {{"op", "manage_runtimes"}})["ok"] == false);
+}
+
+TEST_CASE("examples: paperboat example list and open, [] without paperboat", "[articula]") {
+  const Store store;
+  mo::Omc omc;
+  const json list = op(omc, {{"op", "examples"}})["result"];
+  REQUIRE(list.size() == 1);
+  CHECK(list[0]["name"] == "01 Decay");
+  const json opened = op(omc, {{"op", "example_open"}, {"id", "modelica/01-decay"}});
+  REQUIRE(opened["ok"] == true);
+  CHECK(opened["result"]["path"] == "/home/modelica/01-decay");
+  const json missing = op(omc, {{"op", "example_open"}, {"id", "modelica/99-none"}});
+  CHECK(missing["ok"] == false);
+  CHECK(missing["error"] == "no example modelica/99-none");
+  CHECK(op(omc, {{"op", "example_open"}, {"id", "x; rm -rf /"}})["ok"] == false);
+  setenv("PAPERBOAT_BIN", "/nonexistent/paperboat", 1);
+  CHECK(op(omc, {{"op", "examples"}})["result"] == json::array());
+  CHECK(op(omc, {{"op", "example_open"}, {"id", "modelica/01-decay"}})["ok"] == false);
 }
 
 TEST_CASE("settings.json holds the theme every app starts in", "[articula]") {

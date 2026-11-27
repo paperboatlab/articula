@@ -41,7 +41,9 @@ flowchart LR
   same `transfer_export` the `articula export` CLI runs; `read_data`: a data file an import reads; `open_simplicial`: Simplicial's page on it,
   `?station=ws://localhost:<port>`, from `paperboat app open simplicial --start --no-open --json`), the hubs: `hubs` from `paperboat hub list --json`, `hub_files`, `hub_new`,
   `hub_open_malachite`), `manage_runtimes` (Model › Manage runtimes…: `paperboat launcher --page runtimes --runtime omc`,
-  the Launcher on Runtimes › omc, paperboat#69), and the one file workflow: the workspace (`workspace`, `open_folder`, `connect`,
+  the Launcher on Runtimes › omc, paperboat#69), the examples (`examples` from `paperboat example list --app
+  articula --json`, [] without paperboat; `example_open`: `paperboat example open <id> --json`, a copy in a new
+  window; paperboat#72), and the one file workflow: the workspace (`workspace`, `open_folder`, `connect`,
   `close_workspace`, `tree`; `Omc::set_project` moves the lease with it, and an `open` from outside switches
   to the file's hub or folder first) and the shared store (`recent`, `recent_forget`, `settings`,
   `settings_write`: `$PAPERBOAT_HOME/recent.json` and `settings.json`, each written whole to a temp file and
@@ -52,7 +54,7 @@ flowchart LR
   (a C++ station for Simplicial's engine; MultiBody shapes become its `scene` and `scene.patch`).
 - `server/src/main.cpp`: the `articula-server` binary: the server, and `check`, `generate`, `icon`.
 - `src/App.tsx`: the window (REBRAND: the kit's `.win > .bar`, the frame (the bar, Files/Library and Simulate one surface, the stage and the console in the kit's `.bay`), the kit's `EditorTabs` for the
-  open models and `RuntimesKey` for omc, the Panels key, Ctrl K, menus from the command registry, the
+  open models and `RuntimesKey` for omc, the Panels key, Ctrl K (with the kit's `exampleCommands`: Open example: <name>), menus from the command registry, the
   `WindowKeys` last), and the one file workflow from `@paperboatlab/ui/workspace` and `/hub`: `Start` in the
   bay without a workspace, the File menu from `fileMenu`, the `WorkspaceWell` after the menu bar, `AskOpen`
   outside a hub, our `OpenFile`/`SaveFile` over the hub inside one, the system's dialogs through `shell()` in

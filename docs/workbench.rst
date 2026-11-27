@@ -54,7 +54,7 @@ The stage
 
 The stage shows the model as a **diagram** (the canvas), as **text** (its ``.mo``) or, for a
 ``Modelica.Mechanics.MultiBody`` model that has been simulated, in **3d**: its shapes played back
-against the run's time. Try ``bin/articula examples/multibody/DoublePendulum.mo``.
+against the run's time. Try :kbd:`Ctrl K`, **Open example: 05 Double pendulum**.
 
 Checking a model
 ----------------

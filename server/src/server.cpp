@@ -1604,22 +1604,61 @@ json op_examples() {
   }
 }
 
-// Open example: `paperboat example open <id>` copies it once into $PAPERBOAT_HOME/examples and opens
-// that copy in a new window; its entry, or why not.
-json op_example_open(const json& in) {
+// An example id goes through a shell (paperboat_output): plain path words only, never an option.
+std::string example_id(const json& in) {
   const std::string id = in.value("id", "");
-  // the id goes through a shell (paperboat_output): plain path words only
   if (id.empty() || id[0] == '-' || id.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/-") != std::string::npos)
     throw std::runtime_error("no example " + id);
+  return id;
+}
+
+fs::path user_path(std::string p);
+
+// A folder as one shell word for paperboat_output: absolute (~ is the home folder), never an option.
+// POSIX: single quotes, each ' as '\''. Windows: double quotes; cmd can't escape " and expands %, so
+// those are refused.
+std::string quoted_folder(const std::string& given) {
+  const std::string folder = given == "~" || given.starts_with("~/") || given.starts_with("~\\") ? user_path(given).string() : given;
+  if (folder.empty() || folder[0] == '-' || !fs::path(folder).is_absolute()) throw std::runtime_error(folder + " is not an absolute folder");
+#ifdef _WIN32
+  if (folder.find_first_of("\"%\r\n") != std::string::npos) throw std::runtime_error("a folder with \" or % in its name can't be passed to paperboat");
+  // the CLI's argv parser reads \" as a quote: double the trailing backslashes (C:\ is "C:\\")
+  const auto last = folder.find_last_not_of('\\');
+  return "\"" + folder + std::string(folder.size() - (last == std::string::npos ? 0 : last + 1), '\\') + "\"";
+#else
+  std::string q = "'";
+  for (const char c : folder) q += c == '\'' ? std::string("'\\''") : std::string(1, c);
+  return q + "'";
+#endif
+}
+
+// `paperboat <args> --json`'s object, or its error thrown; `what` names the command for the messages.
+json paperboat_json(const std::string& args, const std::string& what) {
   json out;
   try {
-    out = json::parse(paperboat_output("example open " + id + " --json"));
+    out = json::parse(paperboat_output(args + " --json"));
   } catch (const json::exception&) {
-    throw std::runtime_error("paperboat example open failed; is paperboat on PATH or PAPERBOAT_BIN set?");
+    throw std::runtime_error("paperboat " + what + " failed; is paperboat on PATH or PAPERBOAT_BIN set?");
   }
-  if (!out.is_object()) throw std::runtime_error("paperboat example open failed");
+  if (!out.is_object()) throw std::runtime_error("paperboat " + what + " failed");
   if (out.contains("error")) throw std::runtime_error(out["error"].is_string() ? out["error"].get<std::string>() : out["error"].dump());
   return out;
+}
+
+// Open example (paperboat#75): `paperboat example open <id> [--to <folder>]` opens it where it is (its
+// examples checkout or GitHub's cached copy) in a new window, whose banner offers to copy it into `to`,
+// the folder it was opened from; its entry, or why not.
+json op_example_open(const json& in) {
+  const std::string id = example_id(in);
+  const std::string to = in.value("to", "");
+  return paperboat_json("example open " + id + (to.empty() ? "" : " --to " + quoted_folder(to)), "example open");
+}
+
+// The banner's Copy: `paperboat example copy <id> --to <folder> --open` copies it into <folder>/<its
+// folder name> (refused when that is there already) and opens the copy in a new window; its entry, or why not.
+json op_example_copy(const json& in) {
+  const std::string id = example_id(in);
+  return paperboat_json("example copy " + id + " --to " + quoted_folder(in.value("to", "")) + " --open", "example copy");
 }
 
 // ── The workspace (plans/2026-11-26_11-05_one_file_workflow.md): a folder, a hub, or none (the Start
@@ -2190,6 +2229,8 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_examples();
     } else if (op == "example_open") {
       out["result"] = op_example_open(in);
+    } else if (op == "example_copy") {
+      out["result"] = op_example_copy(in);
     } else if (op == "create_class") {
       out["result"] = op_create_class(in);
     } else if (op == "new_package") {
@@ -2230,7 +2271,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in, session);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; articula/0 has omc, open, workspace, open_folder, connect, close_workspace, tree, recent, recent_forget, settings, settings_write, config, config_write, about, hubs, hub_files, hub_new, hub_open_malachite, open_simplicial, manage_runtimes, examples, example_open, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
+      out["error"] = "unknown op; articula/0 has omc, open, workspace, open_folder, connect, close_workspace, tree, recent, recent_forget, settings, settings_write, config, config_write, about, hubs, hub_files, hub_new, hub_open_malachite, open_simplicial, manage_runtimes, examples, example_open, example_copy, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
       return out.dump();
     }
     out["ok"] = true;
@@ -2244,7 +2285,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
   static const std::set<std::string> disk_only = {"workspace", "open_folder", "connect", "close_workspace", "tree", "recent",
                                                   "recent_forget", "settings", "settings_write", "config", "config_write", "about",
                                                   "git", "hubs", "hub_files", "hub_new", "hub_open_malachite", "open_simplicial", "read_data",
-                                                  "manage_runtimes", "examples", "example_open"};
+                                                  "manage_runtimes", "examples", "example_open", "example_copy"};
   if (!errors_read && !disk_only.contains(op) && !omc.version().empty()) {  // a never-started omc has said nothing
     try {
       if (omc.last_messages().empty()) omc.messages();

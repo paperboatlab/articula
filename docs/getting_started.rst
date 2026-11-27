@@ -30,8 +30,12 @@ Select a part and press :kbd:`F1` to read its class's documentation. :kbd:`Ctrl 
 commands and the workspace's classes.
 
 To start from a working model, type ``example`` in :kbd:`Ctrl K`: **Open example: <name>** lists
-Paperboat's Modelica examples (``paperboat example list --app articula``) and opens your own copy of one
-in a new window (``paperboat example open <id>``, copied once into ``$PAPERBOAT_HOME/examples``).
+Paperboat's Modelica examples (``paperboat example list --app articula``) and opens one where it is, in
+a new window (``paperboat example open <id>``). A line at the top of its stage says it is an example:
+run it as it is, or **copy it to** the folder you opened it from (or, from the Start page, a folder you
+pick) to change it. The copy (``paperboat example copy <id> --to <folder>``) goes into a folder of the
+example's name there and opens in its own window; it is refused when that folder is there already.
+An example from GitHub's copy is replaced after a day, so changes made to it there aren't kept.
 Without the Paperboat CLI the list is empty.
 
 The workspace

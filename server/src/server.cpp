@@ -323,67 +323,13 @@ void ensure_library(Omc& omc, const std::string& cls, const Stage& stage = {}) {
   if (top == "Modelica") omc.call("loadModel(Modelica)");
 }
 
-// A class inside a package needs its package loaded first: omc's loadFile on a file with
-// `within Pkg.Sub` fails when Pkg is not there. The outermost package.mo loads the whole package,
-// subpackages included when package.order names them; loading a subpackage's package.mo directly
-// would be read as a new top-level package ("expected within ;").
-void load_packages(Omc& omc, const fs::path& file, bool force = false) {
-  fs::path top;
-  for (fs::path dir = file.parent_path(); fs::exists(dir / "package.mo"); dir = dir.parent_path()) {
-    top = dir / "package.mo";
-    if (dir.parent_path() == dir) break;
-  }
-  if (top.empty()) return;
-  static std::mutex mutex;
-  static std::set<std::string> loaded;
-  const std::string key = fs::absolute(top).string();
-  {
-    std::lock_guard lock(mutex);
-    if (!force && loaded.contains(key)) return;
-    if (force) loaded.erase(key);
-  }
-  if (omc.call("loadFile(" + quote(key) + ")") != "true")
-    throw std::runtime_error("cannot load package " + top.parent_path().string() + ": " + omc.errors());
-  {
-    std::lock_guard lock(mutex);
-    loaded.insert(key);
-  }
-}
-
-// The class in `file`: search the tree of loaded user classes, not just the top level, because a
-// class inside a package (`Pkg.Sub.B`) is not in getClassNames().
-bool find_class(Omc& omc, const std::string& cls, const fs::path& want, std::string& found, int depth) {
-  if (depth > 8) return false;
-  std::error_code ec;
-  const std::string source = text_of(omc.call("getSourceFile(" + cls + ")"));
-  if (!source.empty() && fs::weakly_canonical(source, ec) == want) {
-    found = cls;
-    return true;
-  }
-  for (const auto& v : parse_value(omc.call("getClassNames(" + cls + ")")).items)
-    if (find_class(omc, cls + "." + v.atom, want, found, depth + 1)) return true;
-  return false;
-}
-
 // The class `file` defines, once loaded.
 std::string load_file(Omc& omc, const fs::path& file, const Stage& stage = {}) {
   if (stage) stage("omc");  // the first call starts omc's session
   ensure_library(omc, "Modelica", stage);
   if (stage) stage("file");
-  load_packages(omc, fs::absolute(file));
-  if (omc.call("loadFile(" + quote(fs::absolute(file).string()) + ")") != "true") {
-    // omc may have restarted since the package was first loaded; reload it once, then the class.
-    load_packages(omc, fs::absolute(file), /*force=*/true);
-    if (omc.call("loadFile(" + quote(fs::absolute(file).string()) + ")") != "true")
-      throw std::runtime_error("cannot load " + file.string() + ": " + omc.errors());
-  }
-  std::error_code ec;
-  const fs::path want = fs::weakly_canonical(file, ec);
-  std::string found;
-  for (const auto& v : parse_value(omc.call("getClassNames()")).items) {
-    if (v.atom == "Modelica") continue;
-    if (find_class(omc, v.atom, want, found, 0)) return found;
-  }
+  load_class_file(omc, fs::absolute(file));
+  if (std::string found = class_in_file(omc, file); !found.empty()) return found;
   throw std::runtime_error("no class in " + file.string());
 }
 

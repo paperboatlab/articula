@@ -16,6 +16,10 @@
 #include <set>
 #include <string>
 #include <vector>
+#ifndef _WIN32
+#include <cstdio>
+#include <sys/wait.h>
+#endif
 
 #include "articula/generate.hpp"
 #include "articula/import.hpp"
@@ -229,6 +233,73 @@ end Bounce;
   CHECK(mo::check(omc, dir / "Bounce.mo", "Bounce").ok);
   fs::remove_all(dir);
 }
+
+TEST_CASE("check finds a class inside a package and loads no MSL it doesn't use (#47)", "[modelica][omc]") {
+  if (!have_omc()) SKIP("omc not installed");
+  const fs::path dir = fs::temp_directory_path() / "articula-package-check-test";
+  fs::remove_all(dir);
+  fs::create_directories(dir / "Basics" / "Interfaces");
+  std::ofstream(dir / "Basics" / "package.mo") << "package Basics\nend Basics;\n";
+  std::ofstream(dir / "Basics" / "package.order") << "Interfaces\nTank\nLoop\n";
+  std::ofstream(dir / "Basics" / "Interfaces" / "package.mo") << "within Basics;\npackage Interfaces\nend Interfaces;\n";
+  std::ofstream(dir / "Basics" / "Interfaces" / "package.order") << "Port\n";
+  std::ofstream(dir / "Basics" / "Interfaces" / "Port.mo") << "within Basics.Interfaces;\nconnector Port\n  Real p;\n  flow Real q;\nend Port;\n";
+  std::ofstream(dir / "Basics" / "Tank.mo") << R"(within Basics;
+model Tank
+  parameter Real area = 2;
+  Real h(start = 1, fixed = true);
+  Interfaces.Port port;
+equation
+  area * der(h) = port.q;
+  port.p = h;
+end Tank;
+)";
+  std::ofstream(dir / "Basics" / "Loop.mo") << R"(within Basics;
+model Loop
+  Tank tank;
+equation
+  tank.port.q = -0.5 * tank.port.p;
+end Loop;
+)";
+  mo::Omc omc(in_tmp());
+  const auto r = mo::check(omc, dir / "Basics" / "Loop.mo", "");
+  INFO(r.message);
+  CHECK(r.ok);
+  CHECK(r.model == "Basics.Loop");
+  CHECK(r.message.find("Modelica") == std::string::npos);
+  CHECK(r.message.find("Curl") == std::string::npos);
+  const auto names = mo::parse_value(omc.call("getClassNames()"));
+  CHECK(std::none_of(names.items.begin(), names.items.end(), [](const mo::OmValue& v) { return v.atom == "Modelica"; }));
+  CHECK(mo::check(omc, dir / "Basics" / "Tank.mo", "Basics.Tank").ok);
+  CHECK(mo::import_model(omc, dir / "Basics" / "Tank.mo", "").to_json().is_object());  // `articula icon` too
+  fs::remove_all(dir);
+}
+
+#if defined(ARTICULA_SERVER_BIN) && !defined(_WIN32)
+// bin/articula runs `articula-server --app <dist> "$@"`: a command after --app is still the command.
+TEST_CASE("a command after a leading --app runs the command, not the server (#46)", "[cli]") {
+  const auto run = [](const std::string& args) {
+    const std::string cmd = std::string("'") + ARTICULA_SERVER_BIN + "' " + args + " 2>&1";
+    std::string out;
+    FILE* p = popen(cmd.c_str(), "r");
+    REQUIRE(p != nullptr);
+    char buf[512];
+    while (fgets(buf, sizeof buf, p)) out += buf;
+    const int status = pclose(p);
+    return std::pair{WIFEXITED(status) ? WEXITSTATUS(status) : -1, out};
+  };
+  const auto [v_code, v_out] = run("--app /nonexistent/dist --version");
+  CHECK(v_code == 0);
+  CHECK(v_out.starts_with("articula "));
+  for (const char* command : {"check", "generate", "icon"}) {
+    const auto [code, out] = run(std::string("--app /nonexistent/dist ") + command);
+    INFO(command << ": " << out);
+    CHECK(code == 2);
+    CHECK(out.find("requires") != std::string::npos);
+    CHECK(out.find("ws://") == std::string::npos);
+  }
+}
+#endif
 
 namespace {
 

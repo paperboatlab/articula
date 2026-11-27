@@ -1350,22 +1350,42 @@ std::set<std::string> class_names(Omc& omc) {
   return out;
 }
 
-// Loads the MSL and `source`; returns the model to use.
+// Whether `model` needs the MSL: its top-level class's `uses` names Modelica, or `source` spells a
+// Modelica.* name. A model that uses neither checks without it (no library download, no errors).
+bool needs_msl(Omc& omc, const fs::path& source, const std::string& model) {
+  const OmValue uses = parse_value(omc.call("getUses(" + model.substr(0, model.find('.')) + ")"));
+  for (const auto& u : uses.items)
+    if (u.is_list && u.size() > 0 && u[0].atom == "Modelica") return true;
+  return read_file(source).find("Modelica.") != std::string::npos;
+}
+
+// Loads `source` (its package first, when it is in one) and the MSL when the model uses it; returns
+// the model to use.
 std::string load(Omc& omc, const fs::path& source, const std::string& model) {
   if (!fs::is_regular_file(source)) throw GenerateError("no such file: " + source.string());
   const std::set<std::string> before = class_names(omc);
-  if (!before.contains("Modelica")) ok_call(omc, "loadModel(Modelica)");
-  const std::set<std::string> with_msl = class_names(omc);
-  ok_call(omc, "loadFile(" + quote(fs::absolute(source).string()) + ")");
-  if (!model.empty()) return model;
-  std::vector<std::string> fresh;
-  for (const auto& n : class_names(omc))
-    if (!with_msl.contains(n)) fresh.push_back(n);
-  if (fresh.size() == 1) return fresh.front();
-  std::string list;
-  for (const auto& n : fresh) list += " " + n;
-  throw GenerateError(fresh.empty() ? "no new class in " + source.string() + " (already loaded? pass --model)"
-                                    : "pick one with --model:" + list);
+  try {
+    load_class_file(omc, fs::absolute(source));
+  } catch (const OmcError& e) {
+    throw GenerateError(e.what());
+  }
+  std::string found = model;
+  if (found.empty()) {
+    std::vector<std::string> fresh;
+    for (const auto& n : class_names(omc))
+      if (!before.contains(n)) fresh.push_back(n);
+    // In a package the file's class is `Pkg.….Name`, not the fresh top-level `Pkg`.
+    if (fs::exists(fs::absolute(source).parent_path() / "package.mo")) found = class_in_file(omc, fs::absolute(source));
+    else if (fresh.size() == 1) found = fresh.front();
+    if (found.empty()) {
+      std::string list;
+      for (const auto& n : fresh) list += " " + n;
+      throw GenerateError(fresh.empty() ? "no new class in " + source.string() + " (already loaded? pass --model)"
+                                        : "pick one with --model:" + list);
+    }
+  }
+  if (!class_names(omc).contains("Modelica") && needs_msl(omc, source, found)) ok_call(omc, "loadModel(Modelica)");
+  return found;
 }
 
 // The top-level components in order (the protected ones also in `hidden`), and those marked

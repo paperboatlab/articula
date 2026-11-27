@@ -125,6 +125,15 @@ struct OmValue {
 OmValue parse_value(std::string_view text);  // throws OmcError on malformed text
 std::string quote(std::string_view text);    // a Modelica string literal
 
+// A class inside a package needs its package loaded first: omc's loadFile on a file with
+// `within Pkg.Sub` fails when Pkg is not there. Loads the outermost package.mo above `file` (once per
+// process unless `force`); a file outside any package loads nothing. Throws OmcError.
+void load_packages(Omc& omc, const std::filesystem::path& file, bool force = false);
+// load_packages, then `file` itself (reloading the package once if omc restarted). Throws OmcError.
+void load_class_file(Omc& omc, const std::filesystem::path& file);
+// The class `file` defines among the loaded user classes (`Pkg.Sub.B` too), or "" when none does.
+std::string class_in_file(Omc& omc, const std::filesystem::path& file);
+
 }  // namespace articula
 
 namespace paperboat::modelica {

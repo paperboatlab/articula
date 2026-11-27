@@ -69,7 +69,9 @@ if(ARTICULA_BUILD_TESTS)
   add_executable(articula_tests tests/modelica_test.cpp)
   target_compile_definitions(articula_tests PRIVATE
     ARTICULA_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data"
-    PAPERBOAT_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+    PAPERBOAT_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data"
+    ARTICULA_SERVER_BIN="$<TARGET_FILE:articula-server>")
+  add_dependencies(articula_tests articula-server)
   target_link_libraries(articula_tests PRIVATE articula_lib tomlplusplus::tomlplusplus Catch2::Catch2WithMain articula_warnings)
   include(Catch)
   catch_discover_tests(articula_tests)

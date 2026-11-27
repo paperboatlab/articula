@@ -875,11 +875,12 @@ ImportedModel import_model(Omc& omc, const fs::path& source, std::string_view cl
 
   ensure_msl_if_needed(omc, mo_text);
   const std::set<std::string> before = loaded_top_classes(omc);
-  if (trim(omc.call("loadFile(" + quote(fs::absolute(source).string()) + ")")) != "true") {
-    throw OmcError("loadFile failed for " + source.string() + ": " + omc.errors());
-  }
+  load_class_file(omc, source);  // its package first, when it is in one
 
   std::string target = trim(class_name);
+  // In a package the file's class is `Pkg.….Name`, not the fresh top-level `Pkg`.
+  if (target.empty() && fs::exists(fs::absolute(source).parent_path() / "package.mo"))
+    target = class_in_file(omc, fs::absolute(source));
   if (target.empty()) {
     std::vector<std::string> fresh;
     for (const auto& n : loaded_top_classes(omc))

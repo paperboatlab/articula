@@ -3,6 +3,7 @@
 #include <iostream>
 #include <map>
 #include <sstream>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -248,6 +249,11 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; ++i) args.emplace_back(argv[i]);
 
   const fs::path exe_dir = fs::weakly_canonical(fs::path(argv[0])).parent_path();
+
+  // bin/articula always passes `--app <dist>` first; a command after it is still that command (#46),
+  // and only the server reads --app.
+  static const std::set<std::string_view> commands{"help", "--help", "-h", "--version", "-v", "generate", "check", "export", "icon"};
+  if (args.size() >= 3 && args[0] == "--app" && commands.contains(args[2])) args.erase(args.begin(), args.begin() + 2);
 
   if (!args.empty()) {
     if (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {

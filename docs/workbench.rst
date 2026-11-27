@@ -30,7 +30,8 @@ dialog) or Connect to a hub…; without Malachite it goes straight to the local 
 and Save as are Articula's own picker over the hub: only the ``.mo`` files and the folders holding them
 (**All files** shows the rest), with when each changed and its size. A model from outside the workspace
 switches the workspace to its folder, or to its hub; the models of the old one close. Save as writes
-the model to the new file and goes on with it there.
+the model to the new file and goes on with it there; a name that is taken asks first (the hub's picker
+turns Save into **Replace**, the system's dialog asks in its own words).
 
 The workspace menu (the folder or hub in the bar) opens another folder, connects to a hub, shows the
 folder in your file manager, and closes it (back to Start). In a hub it switches hubs, makes a **New

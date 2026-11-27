@@ -3,7 +3,7 @@
 // workspace, and `articula export` is the same from a terminal. An import runs here, as edits to the open model
 // (one component and its modifiers), so it undoes like any other edit.
 import { useEffect, useState } from "react";
-import { Key, Segmented, SettingRow, SettingsSection, TransferDialog, TransferPreview, pickKind, shellLine, type TransferKind, type TransferMode } from "@paperboatlab/ui";
+import { Dialog, Key, Segmented, SettingRow, SettingsSection, TransferDialog, TransferPreview, pickKind, shellLine, type TransferKind, type TransferMode } from "@paperboatlab/ui";
 import { parse as parseToml } from "smol-toml";
 import type { OmcClient } from "../omc/omc.ts";
 import type { StudioApi, StudioModel } from "../model/types.ts";
@@ -133,6 +133,9 @@ export function ArticulaTransfer({ mode, kind, omc, api, model, root, hub, pickO
   const [o, setO] = useState<Opts>({ out: {}, path: "auto", solver: "cvode", set: "", at: "0", lang: "julia", fmi: "2.0", fmuType: "cs", stage: "backEnd", file: {}, into: "", name: "", columns: [], smooth: "hold" });
   const up = (p: Partial<Opts>) => setO((x) => ({ ...x, ...p }));
   const [busy, setBusy] = useState("");
+  // a file there already: ask first (Replace or Cancel), unless a picker just asked about that path
+  const [taken, setTaken] = useState<{ kind: string; path: string } | null>(null);
+  const [picked, setPicked] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<string[]>([]);
   const [data, setData] = useState<{ file: string; text?: string; error?: string }>({ file: "" });
 
@@ -180,9 +183,12 @@ export function ArticulaTransfer({ mode, kind, omc, api, model, root, hub, pickO
     return shellLine([...a, "--out", out(k)]);
   };
 
-  const exportRun = async (k: string) => {
+  /** false: a file is there and the user is asked first; the dialog stays. */
+  const exportRun = async (k: string, replace = picked[k] === out(k)) => {
     if (bad) throw new Error(`the operating point takes name = number: ${bad}`);
-    const r = await omc.op<{ path: string; notes: string[] }>("transfer", { mode: "export", ...args(k) }, (stage) => setBusy(`${stage[0].toUpperCase()}${stage.slice(1)}…`));
+    const r = await omc.op<{ path: string; notes: string[]; exists?: string }>("transfer", { mode: "export", ...args(k), replace },
+      (stage) => setBusy(`${stage[0].toUpperCase()}${stage.slice(1)}…`));
+    if (r.exists) return (setTaken({ kind: k, path: r.exists }), false);
     onDone(`Exported ${r.path}`, r.notes.filter(Boolean).join(" · ") || `into ${root.split("/").pop()}`, "export");
   };
   const importRun = async (k: string) => {
@@ -228,11 +234,11 @@ export function ArticulaTransfer({ mode, kind, omc, api, model, root, hub, pickO
   const place = root.split("/").pop();
   const where = (k: string) => (
     <SettingsSection title="Where">
-      <SettingRow label="Save to" hint={hub ? `In the hub ${place}: an export stays in it; a file there already is replaced, its earlier version in the hub's history`
-        : `In ${place}, or anywhere on this computer (an absolute path, ~/…); a file there already is replaced`}>
+      <SettingRow label="Save to" hint={hub ? `In the hub ${place}: an export stays in it; a file there already is replaced when you say so, its earlier version in the hub's history`
+        : `In ${place}, or anywhere on this computer (an absolute path, ~/…); a file there already is replaced when you say so`}>
         <input className="well transfer-path" aria-label="Save to" value={out(k)} onChange={(e) => up({ out: { ...o.out, [k]: e.target.value } })} />
         {pickOut && <Key size="sm" onClick={() => void pickOut(out(k).split("/").pop()!, exportKinds({ model, run }).find((x) => x.id === k)!.types as string[])
-          .then((p) => { if (p) up({ out: { ...o.out, [k]: p } }); })}>Change…</Key>}
+          .then((p) => { if (p) { up({ out: { ...o.out, [k]: p } }); setPicked((x) => ({ ...x, [k]: p })); } })}>Change…</Key>}
       </SettingRow>
     </SettingsSection>
   );
@@ -318,16 +324,25 @@ export function ArticulaTransfer({ mode, kind, omc, api, model, root, hub, pickO
   };
 
   const SAY: Record<string, string> = { station: "Builds the station (a minute the first time), then packs it", "linear-station": "Linearises, then builds a station from A, B, C, D", linear: "omc's linearize", fmu: "omc's buildModelFMU", flat: "omc's instantiateModel", equations: "omc's dumpXMLDAE", results: "From the last run; nothing runs again" };
-  return (
+  const go = (m: TransferMode, k: string, replace?: boolean) => {
+    setBusy(m === "export" ? "Exporting…" : "Importing…");
+    (m === "export" ? exportRun(k, replace) : importRun(k)).then((done) => done !== false && onClose(), (e: Error) => onFail(e, m)).finally(() => setBusy(""));
+  };
+  return (<>
     <TransferDialog kinds={{ export: exportKinds({ model, stationWhy, run }), import: importKinds(model) }} mode={mode} kind={kind}
       subject={model?.file ? `${name} · ${rel(model.file)}` : name}
       body={body} command={command} busy={busy || undefined}
       say={(m, k) => (m === "export" ? SAY[k] : k === "parameters" ? "Changes the modifiers: one undo step each" : "Adds a component to the model: Undo takes it back")}
       onKind={(m, k) => { setCur({ mode: m, kind: k }); onKind(m, k); }}
-      onRun={(m, k) => {
-        setBusy(m === "export" ? "Exporting…" : "Importing…");
-        (m === "export" ? exportRun(k) : importRun(k)).then(onClose, (e: Error) => onFail(e, m)).finally(() => setBusy(""));
-      }}
+      onRun={(m, k) => go(m, k)}
       onClose={onClose} />
-  );
+    {taken && (
+      <Dialog title={`Replace ${taken.path.split("/").pop()}?`} onClose={() => setTaken(null)} actions={<>
+        <Key kind="danger" onClick={() => { const t = taken; setTaken(null); go("export", t.kind, true); }}>Replace</Key>
+        <Key shortcut="Esc" onClick={() => setTaken(null)}>Cancel</Key>
+      </>}>
+        <p>{taken.path} is there already. Replacing it writes over it{hub ? "; its earlier version stays in the hub's history" : ""}.</p>
+      </Dialog>
+    )}
+  </>);
 }

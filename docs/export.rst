@@ -13,7 +13,9 @@ Export
 are such paths. In a **hub** an export stays inside it (**Change…** opens the hub's picker), so the hub
 keeps it and its history. In a **folder** it may go anywhere on this computer: an absolute path or
 ``~/…``, or **Change…**, the system's save dialog in a Paperboat window. A file already there is replaced
-(in a hub, its earlier version stays in the hub's history).
+only when you say so: Articula asks (**Replace** or **Cancel**) before it writes anything, unless you just
+chose that file with **Change…**, whose picker asked already. In a hub, its earlier version stays in the
+hub's history.
 
 .. list-table::
    :header-rows: 1
@@ -63,7 +65,8 @@ The dialog's command runs the same export without the app, into the current fold
 ``--as`` is ``station``, ``linear-station``, ``linear``, ``fmu``, ``flat`` or ``equations``; ``--set
 a=1,b=2`` and ``--at <s>`` the operating point; ``--lang``, ``--fmi``, ``--type cs|me``, ``--solver
 cvode|euler``, ``--stage flat|optimiser|backEnd`` and ``--path auto|ode|fmu`` the options above. Without
-``--out`` it writes ``<model>`` with the kind's extension. ``articula help`` lists them.
+``--out`` it writes ``<model>`` with the kind's extension. A file already there stops it, unless
+``--replace``. ``articula help`` lists them.
 
 Import
 ------

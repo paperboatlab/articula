@@ -2006,6 +2006,9 @@ nlohmann::json transfer_export(Omc& omc, const nlohmann::json& in, const fs::pat
   if (confined && !inside(out, root)) throw std::runtime_error("an export stays inside the hub: " + rel);
   static const std::set<std::string> kinds{"station", "linear", "linear-station", "fmu", "flat", "equations", "results"};
   if (!kinds.contains(kind)) throw std::runtime_error("export as " + kind + ": unknown kind");  // before making any folder
+  // a file there already: say so and write nothing, unless the caller asked (and so the user agreed) to replace it
+  const auto shown = [&] { return inside(out, root) ? out.lexically_relative(root).generic_string() : out.string(); };
+  if (fs::exists(out) && !in.value("replace", false)) return {{"exists", shown()}};
   fs::create_directories(out.parent_path());
   const auto stage = [&](const char* s) {
     if (session.push) session.push(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", s}, {"fraction", 0}}.dump());
@@ -2079,7 +2082,7 @@ nlohmann::json transfer_export(Omc& omc, const nlohmann::json& in, const fs::pat
   } else {
     throw std::runtime_error("export as " + kind + ": unknown kind");
   }
-  return {{"path", inside(out, root) ? out.lexically_relative(root).generic_string() : out.string()}, {"bytes", fs::file_size(out)}, {"notes", notes}};
+  return {{"path", shown()}, {"bytes", fs::file_size(out)}, {"notes", notes}};
 }
 
 namespace {

@@ -33,7 +33,7 @@ void print_help(std::string_view prog) {
             << "  " << prog << " export <Model.mo> --model <Name> --as <kind> [--out <file>] [options]\n"
             << "                   kind: station | linear-station | linear | fmu | flat | equations\n"
             << "                   --set a=1,b=2 (the operating point)  --at <s>  --lang julia|python|matlab|modelica\n"
-            << "                   --fmi 2.0|3.0  --type cs|me  --solver cvode|euler  --stage flat|optimiser|backEnd  --path auto|ode|fmu\n"
+            << "                   --fmi 2.0|3.0  --type cs|me  --solver cvode|euler  --stage flat|optimiser|backEnd  --path auto|ode|fmu  --replace\n"
             << "\nomc runs as Paperboat's omc runtime (paperboat runtime list); Modelica libraries are its\n"
             << "packages: paperboat package add omc Modelica --project <folder>\n\n"
             << "  " << prog << " --help | --version\n"
@@ -146,6 +146,10 @@ int cmd_export(const std::vector<std::string_view>& args) {
   static const std::map<std::string_view, const char*> flag{{"--model", "model"}, {"--as", "kind"}, {"--out", "out"}, {"--lang", "lang"},
       {"--fmi", "fmi"}, {"--type", "fmuType"}, {"--solver", "fmu_solver"}, {"--stage", "stage"}, {"--path", "path"}};
   for (std::size_t i = 1; i < args.size(); ++i) {
+    if (args[i] == "--replace") {
+      in["replace"] = true;
+      continue;
+    }
     if (i + 1 >= args.size()) {
       std::cerr << "error: " << args[i] << " needs a value\n";
       return 2;
@@ -184,6 +188,10 @@ int cmd_export(const std::vector<std::string_view>& args) {
     omc.call("loadModel(Modelica)");
     if (omc.call("loadFile(" + mo::quote(omc.omc_path(source.string())) + ")") != "true") throw std::runtime_error(omc.errors());
     const auto r = mo::transfer_export(omc, in, fs::current_path(), false);
+    if (r.contains("exists")) {
+      std::cerr << "error: " << r["exists"].get<std::string>() << " is there already (--replace writes over it)\n";
+      return 1;
+    }
     std::cout << "wrote " << r.value("path", std::string()) << " (" << r.value("bytes", 0) << " bytes)\n";
     for (const auto& n : r["notes"]) if (!n.get<std::string>().empty()) std::cout << "  " << n.get<std::string>() << '\n';
     return 0;

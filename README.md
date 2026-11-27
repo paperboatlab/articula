@@ -22,7 +22,7 @@ server/        the app server (C++20): articula/0 over WebSocket, omc through pa
 src/           the page (React, @paperboatlab/ui), built into dist/
 bin/articula   the command
 docs/          the manual (reStructuredText)
-examples/      models to open
+examples/      a broken-on-purpose model (the Console's cards) and a C++ station
 ```
 
 ## Install

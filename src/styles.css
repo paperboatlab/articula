@@ -25,6 +25,7 @@ body { background: var(--surface-ground); color: var(--text); font: var(--size-s
 .panel-head .tabs { margin-right: auto; }
 
 /* the left card: Files | Library; a class row shows its kind as a letter */
+.side-files .panel-body { display: flex; flex-direction: column; }  /* the kit's body is a block: a rail body fills it, so the library's tree and cards share its height */
 .side-files .rail-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
 .side-files .rail-body[hidden] { display: none; }
 .ck { width: 14px; height: 14px; flex: none; display: inline-grid; place-items: center; border-radius: var(--radius-sm); font: 600 var(--size-3xs)/1 var(--font-mono); color: var(--accent-text); border: 1px solid var(--accent-select); }
@@ -561,3 +562,8 @@ body.dragging-card .library {
 .solver-field .well { width: 100%; height: 26px; }
 .solver-undo:disabled { visibility: hidden; }
 
+
+/* the wait while omc starts and the model opens (Opening.tsx): the kit's splash, omc's messages under it */
+.opening { min-height: 0; display: flex; flex-direction: column; }
+.opening-log { flex: none; max-height: 30vh; overflow: auto; margin: 0 auto var(--space-5); width: min(720px, 90vw); padding: var(--space-3); background: var(--surface-sunken); border: 1px solid var(--line); border-radius: var(--radius-md); font: var(--size-2xs)/1.5 var(--font-mono); color: var(--text-muted); white-space: pre-wrap; }
+.opening-log .error { color: var(--danger-text); }

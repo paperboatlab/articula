@@ -91,13 +91,16 @@ const asGraph = (m: StudioModel): Graph => ({
   wires: m.connections.map((c) => ({ a: c.a, b: c.b, ...(c.points ? { points: c.points } : {}) })),
 });
 
-export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: StudioApi | null; actions: Actions; error: string; stage: string } {
+/** What the first open waits on (the splash): omc's session, the MSL, the file, then reading the model. */
+export type OpenStep = { step: "omc" | "library" | "file" } | { step: "read"; model: string; file: string };
+
+export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: StudioApi | null; actions: Actions; error: string; stage: OpenStep } {
   const [model, setModel] = useState<StudioModel | null>(null);
   const [dirty, setDirty] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);
   const [notice, setNotice] = useState<Notice>(QUIET);
   const [error, setError] = useState("");
-  const [stage, setStage] = useState("loading the Modelica library and opening the model");
+  const [stage, setStage] = useState<OpenStep>({ step: "omc" });
   const [ready, setReady] = useState(false);
   const looks = useRef<IconCache>(new Map());
   const current = useRef<StudioModel | null>(null);
@@ -151,10 +154,10 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
   // Open the server's model once the connection is up; none: the Start page or the folder alone.
   useEffect(() => {
     let live = true;
-    omc.op<{ file: string | null; model: string | null }>("open").then(
+    omc.op<{ file: string | null; model: string | null }>("open", {}, (step) => live && (step === "omc" || step === "library" || step === "file") && setStage({ step })).then(
       async (opened) => {
         if (opened.file && opened.model) {
-          setStage(`reading ${opened.model}: its parts, icons and wires`);
+          setStage({ step: "read", model: opened.model, file: opened.file });
           const m = await readModel(omc, opened.model, opened.file, looks.current);
           if (!live) return;
           setModel(m);
@@ -391,7 +394,6 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         const target = file?.trim() || (raw.endsWith(".mo") ? raw : `${raw}.mo`);
         await enqueue(async () => {
           const opened = await omc.op<{ file: string; model: string }>("open", { file: target });
-          setStage(`reading ${opened.model}: its parts, icons and wires`);
         const m = await readModel(omc, opened.model, opened.file, looks.current);
           setModel(m);
           setDirty(false);
@@ -443,7 +445,6 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         if (!target) return;
         await enqueue(async () => {
           const opened = await omc.op<{ file: string; model: string }>("open", { file: target, ...(content ? { content } : {}) });
-          setStage(`reading ${opened.model}: its parts, icons and wires`);
         const m = await readModel(omc, opened.model, opened.file, looks.current);
           setModel(m);
           setDirty(false);

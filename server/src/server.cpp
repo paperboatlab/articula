@@ -208,10 +208,14 @@ std::string user_model(const json& in) {
   return model;
 }
 
-void ensure_library(Omc& omc, const std::string& cls) {
+// `stage` hears the steps an open waits on (the page's splash): "library" before the MSL loads.
+using Stage = std::function<void(const char*)>;
+
+void ensure_library(Omc& omc, const std::string& cls, const Stage& stage = {}) {
   const std::string top = cls.substr(0, cls.find('.'));
   for (const auto& v : parse_value(omc.call("getClassNames()")).items)
     if (v.atom == top) return;
+  if (stage) stage("library");
   if (top == "Modelica") omc.call("loadModel(Modelica)");
 }
 
@@ -258,8 +262,10 @@ bool find_class(Omc& omc, const std::string& cls, const fs::path& want, std::str
 }
 
 // The class `file` defines, once loaded.
-std::string load_file(Omc& omc, const fs::path& file) {
-  ensure_library(omc, "Modelica");
+std::string load_file(Omc& omc, const fs::path& file, const Stage& stage = {}) {
+  if (stage) stage("omc");  // the first call starts omc's session
+  ensure_library(omc, "Modelica", stage);
+  if (stage) stage("file");
   load_packages(omc, fs::absolute(file));
   if (omc.call("loadFile(" + quote(fs::absolute(file).string()) + ")") != "true") {
     // omc may have restarted since the package was first loaded; reload it once, then the class.
@@ -1814,7 +1820,9 @@ json op_open(Omc& omc, const json& in, const Session& session) {
     now = place_of_file(file);
     work_in(omc, now);
   }
-  const std::string model = load_file(omc, file);
+  const std::string model = load_file(omc, file, [&](const char* stage) {
+    if (session.push) session.push(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", stage}, {"fraction", 0}}.dump());
+  });
   remember("file", file, now.hub);
   return {{"file", file.string()}, {"model", model}, {"workspace", place_json(now)}};
 }

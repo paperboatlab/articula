@@ -40,7 +40,8 @@ flowchart LR
   generate/export (`export` serve: `paperboat run` the station; `transfer`: Export as ▸ into the workspace, the
   same `transfer_export` the `articula export` CLI runs; `read_data`: a data file an import reads; `open_simplicial`: Simplicial's page on it,
   `?station=ws://localhost:<port>`, from `paperboat app open simplicial --start --no-open --json`), the hubs: `hubs` from `paperboat hub list --json`, `hub_files`, `hub_new`,
-  `hub_open_malachite`), and the one file workflow: the workspace (`workspace`, `open_folder`, `connect`,
+  `hub_open_malachite`), `manage_runtimes` (Model › Manage runtimes…: `paperboat launcher --page runtimes --runtime omc`,
+  the Launcher on Runtimes › omc, paperboat#69), and the one file workflow: the workspace (`workspace`, `open_folder`, `connect`,
   `close_workspace`, `tree`; `Omc::set_project` moves the lease with it, and an `open` from outside switches
   to the file's hub or folder first) and the shared store (`recent`, `recent_forget`, `settings`,
   `settings_write`: `$PAPERBOAT_HOME/recent.json` and `settings.json`, each written whole to a temp file and

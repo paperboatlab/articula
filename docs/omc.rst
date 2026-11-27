@@ -13,4 +13,5 @@ in the session's own work folder, and libraries live in the workspace's package 
   the network is allowed for that step only.
 
 In Articula, the runtimes key in the bar shows omc's state; its Libraries… opens the library list.
+Model › Manage runtimes… opens the Launcher on Runtimes › omc (``paperboat launcher --page runtimes --runtime omc``).
 A session that fails starts again with the next call, loading again what the last one had.

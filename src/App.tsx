@@ -833,6 +833,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     { id: "cancel-simulate", label: "Cancel simulation", menu: "model", group: "simulate", enabled: running, why: "no simulation is running", run: () => window.dispatchEvent(new Event("articula:cancel")) },
     { id: "solver", label: "Solver settings…", menu: "model", group: "solver", run: () => (setSide(() => true), window.dispatchEvent(new Event("articula:solver"))) },
     { id: "libraries", label: "Libraries…", menu: "model", group: "libraries", run: () => setPackagesOpen(true) },
+    { id: "runtimes", label: "Manage runtimes…", menu: "model", group: "libraries", icon: "a-runtimes", run: () => void omc.op("manage_runtimes", {}).catch((e) => fail(e, "Couldn't open the Launcher")) },
 
     // View menu
     { id: "view.search", label: "Command search…", menu: "view", group: "search", shortcut: "Ctrl K", chord: SEARCH_CHORD, quiet: true, run: () => setSearchOpen(true) },

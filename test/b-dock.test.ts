@@ -170,7 +170,8 @@ test("dock: exportStation streams progress sequence and formats result or error"
   assert.equal(defaultExportFolder(api.model.name), "rl-circuit-cpp");
 
   const seen: ExportProgress[] = [];
-  const outcome = await runStationExport(api, "pst", (p) => seen.push(p));
+  api.setExportScript([{ stage: "check", fraction: 0.25 }, { stage: "flatten", fraction: 0.5 }, { stage: "generate", fraction: 0.75 }, { stage: "build", fraction: 1.0 }], { name: "RLCircuit", port: 4100, state: "building" });
+  const outcome = await runStationExport(api, "serve", (p) => seen.push(p));
 
   assert.equal(outcome.ok, true);
   assert.deepEqual(
@@ -182,7 +183,7 @@ test("dock: exportStation streams progress sequence and formats result or error"
       ["build", 1.0],
     ],
   );
-  assert.match(outcome.line, /downloaded · no events/);
+  assert.match(outcome.line, /^building RLCircuit for port 4100/);
 
   // Error path
   api.setExportScript([{ stage: "check", fraction: 0.2 }], new Error("DAE has structural singularity"));

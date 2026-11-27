@@ -63,12 +63,10 @@ export type StudioModel = {
 };
 
 export type ExportProgress = { stage: "check" | "flatten" | "generate" | "build"; fraction: number };
-export type ExportMode = "pst" | "serve" | "status" | "stop";
+export type ExportMode = "serve" | "status" | "stop";  // a .pst: the `transfer` op (Export as ▸ Station)
 export type ExportResult = {
   path?: "ode" | "fmu";
   reason?: string;
-  file?: string;
-  pst?: string;
   name?: string;
   port?: number;
   state?: "building" | "running" | "exited" | "stopped";

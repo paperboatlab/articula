@@ -837,20 +837,6 @@ int free_port() {
   return ntohs(a.sin_port);
 }
 
-std::string base64(const std::string& in) {
-  static const char* t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  std::string out;
-  for (std::size_t i = 0; i < in.size(); i += 3) {
-    const unsigned v = (static_cast<unsigned char>(in[i]) << 16) | (i + 1 < in.size() ? static_cast<unsigned char>(in[i + 1]) << 8 : 0) |
-                       (i + 2 < in.size() ? static_cast<unsigned char>(in[i + 2]) : 0);
-    out += t[v >> 18 & 63];
-    out += t[v >> 12 & 63];
-    out += i + 1 < in.size() ? t[v >> 6 & 63] : '=';
-    out += i + 2 < in.size() ? t[v & 63] : '=';
-  }
-  return out;
-}
-
 // The paperboat CLI: $PAPERBOAT_BIN or the one on PATH. It runs the installed apps' commands too:
 // `pack` and `run` are Simplicial's (paperboat app install simplicial).
 std::string paperboat_bin() {
@@ -1120,8 +1106,8 @@ json serve_stop(int port) {
   return json{{"port", port}, {"state", "stopped"}};
 }
 
-// Export without a folder of the user's, into <tmp>/articula_<model>: mode "pst" packs it and returns
-// the archive (base64); "serve" starts it on the given port if free, else a free one and returns at once (poll "status": the
+// Export without a folder of the user's, into <tmp>/articula_<model>: mode "pst" packs it there and returns its
+// path (`pst_path`, which transfer copies into the workspace); "serve" starts it on the given port if free, else a free one and returns at once (poll "status": the
 // first start builds the engine, minutes); "stop" ends one.
 json op_export(Omc& omc, const json& in, const Session& session) {
   const std::string mode = in.value("mode", "pst");
@@ -1166,10 +1152,7 @@ json op_export(Omc& omc, const json& in, const Session& session) {
       }
     });
     if (code != 0) throw paperboat_failed("pack", code, log);
-    std::ifstream f(pst, std::ios::binary);
-    out["file"] = stem + ".pst";
-    out["pst"] = base64(std::string(std::istreambuf_iterator<char>(f), {}));
-    out["pst_path"] = pst.string();  // for transfer's station export, which copies it into the workspace
+    out["pst_path"] = pst.string();  // transfer's Station and Linear station copy it into the workspace
   } else {
     // a restart asks for the port it just left, so a paperboat tab on it reconnects
     const int want = in.value("port", 0);

@@ -16,9 +16,12 @@ export function StudioDock({
   canExport = true,
   why = "",
   beforeExport,
+  onExport,
   onLog,
 }: {
   canExport?: boolean;
+  /** Export station…: the export dialog on Station, writing into the workspace. */
+  onExport?: () => void;
   why?: string;
   beforeExport?: () => Promise<void>;
   onLog?: (text: string, level?: "info" | "warn" | "error") => void;
@@ -85,7 +88,7 @@ export function StudioDock({
     setOutcome(null);
     logOffset.current = 0;
     logPending.current = "";
-    onLog?.(mode === "pst" ? "packing the station…" : "starting the station: building…", "info");
+    onLog?.("starting the station: building…", "info");
     const again = mode === "serve" ? running?.port : undefined; // a restart keeps its port
     if (again) await runStationExport(api, "stop", () => {}, again);
     setRunning(null);
@@ -245,11 +248,11 @@ export function StudioDock({
           <button
             type="button"
             className="studio-dock-export-key"
-            disabled={!isBalanced || busy || !canExport}
-            title={!canExport ? why : isBalanced ? "Download the station as a .pst package" : balance.words}
-            onClick={() => void handleExport("pst")}
+            disabled={!isBalanced || busy || !canExport || !onExport}
+            title={!canExport ? why : !onExport ? "open a folder or a hub first: an export goes into it" : isBalanced ? "Export the station (.pst) into the workspace" : balance.words}
+            onClick={onExport}
           >
-            Download .pst
+            Export station…
           </button>
           <button
             type="button"

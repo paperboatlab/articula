@@ -93,14 +93,14 @@ It reads a file in the workspace.
 The dock: a station for Simplicial
 ----------------------------------
 
-The dock exports the model as a Simplicial station too: **Download .pst** packs a ``<model>.pst``, and
-**Start in Simplicial** builds the station, starts it on a free port and opens Simplicial on it, on the
-station's starter flow (**Open** opens it again, **Restart** rebuilds, **Stop** ends it). Both generate into
-``<tmp>/articula_<model>`` and run Simplicial's ``paperboat pack`` or ``paperboat run`` there, through
-``$PAPERBOAT_BIN`` or ``paperboat`` on PATH, so Simplicial must be installed
-(``paperboat app install simplicial``). The first build of a station compiles it, which takes a minute or
-so; a model with MultiBody shapes builds an FMU first, which takes longer. Export ▸ Station and Linear
-station pack the same way.
+The dock has the station's two keys: **Export station…** opens this dialog on Station (the ``.pst`` goes
+into the workspace, as any export), and **Start in Simplicial** builds the station, starts it on a free
+port and opens Simplicial on it, on the station's starter flow (**Open** opens it again, **Restart**
+rebuilds, **Stop** ends it), writing no file of yours. Both generate into ``<tmp>/articula_<model>`` and
+run Simplicial's ``paperboat pack`` or ``paperboat run`` there, through ``$PAPERBOAT_BIN`` or
+``paperboat`` on PATH, so Simplicial must be installed (``paperboat app install simplicial``). The first
+build of a station compiles it, which takes a minute or so; a model with MultiBody shapes builds an FMU
+first, which takes longer. Linear station packs the same way.
 
 A model with MultiBody shapes (bodies, joints) draws them on the station's 3D view in
 Simplicial, as Articula's own 3D view does, and they move with the run. A model without shapes has no

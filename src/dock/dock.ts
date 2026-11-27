@@ -301,22 +301,8 @@ export type ExportOutcome =
   | { ok: true; result: ExportResult; line: string }
   | { ok: false; result?: ExportResult; line: string };
 
-function saveBase64(file: string, b64: string) {
-  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
-  a.download = file;
-  document.body.append(a);
-  a.click();
-  setTimeout(() => {
-    a.remove();
-    URL.revokeObjectURL(a.href);
-  }, 1000);
-}
-
 export function serveLine(mode: ExportMode, r: ExportResult, port?: number): string {
   if (mode === "stop") return `stopped station on port ${port}`;
-  if (mode === "pst") return `${r.file} downloaded · ${r.reason}`;
   if (r.state === "running") return `${r.name ?? "station"} running on port ${r.port}`;
   if (r.state === "exited") return `station on port ${r.port} exited:\n${r.tail ?? r.log ?? ""}`;
   return `building ${r.name ?? "station"} for port ${r.port}… (a first build compiles it: a minute or so)`;
@@ -331,7 +317,6 @@ export async function runStationExport(
 ): Promise<ExportOutcome> {
   try {
     const result = await api.exportStation(mode, onProgress, port, offset);
-    if (result.pst && result.file) saveBase64(result.file, result.pst);
     const line = serveLine(mode, result, port);
     return result.state === "exited" ? { ok: false, result, line } : { ok: true, result, line };
   } catch (err) {

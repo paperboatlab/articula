@@ -970,6 +970,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                       canExport={exportReady}
                       why={exportWhy}
                       beforeExport={saveCurrent}
+                      onExport={place ? () => openTransfer("export", "station") : undefined}
                       onLog={(text, level) => {
                         setConsoleTab("console");
                         setConsoleShown(true);

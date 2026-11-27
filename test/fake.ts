@@ -294,7 +294,6 @@ export function createFakeStudio(options: FakeStudioOptions = {}): FakeStudio {
     options.checkModelReply ?? DEFAULT_CHECK_REPLY;
   let exportSteps: ExportProgress[] = options.exportSteps ?? DEFAULT_EXPORT_STEPS;
   let exportResult: ExportResult | Error = options.exportResult ?? {
-    file: "rl_circuit.pst",
     path: "ode",
     reason: "no events, no nonlinear torn systems, no external tables",
   };

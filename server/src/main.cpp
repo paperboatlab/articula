@@ -183,7 +183,7 @@ int cmd_export(const std::vector<std::string_view>& args) {
     mo::Omc omc(around(source));
     omc.call("loadModel(Modelica)");
     if (omc.call("loadFile(" + mo::quote(omc.omc_path(source.string())) + ")") != "true") throw std::runtime_error(omc.errors());
-    const auto r = mo::transfer_export(omc, in, fs::current_path(), {});
+    const auto r = mo::transfer_export(omc, in, fs::current_path(), false);
     std::cout << "wrote " << r.value("path", std::string()) << " (" << r.value("bytes", 0) << " bytes)\n";
     for (const auto& n : r["notes"]) if (!n.get<std::string>().empty()) std::cout << "  " << n.get<std::string>() << '\n';
     return 0;

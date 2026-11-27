@@ -52,8 +52,8 @@
 //                                                  check|flatten|generate|build; `files` (relative path →
 //                                                  text) only when `dry`, which writes nothing
 //   transfer  {mode: "export", kind, model, out, …}
-//                                              → {path, bytes, notes}   Export as ▸: transfer_export() into the
-//                                                  workspace (`out` relative to its root, never outside it)
+//                                              → {path, bytes, notes}   Export as ▸: transfer_export(); `out`
+//                                                  relative to the workspace's root, or anywhere outside a hub
 //   read_data {file, limit?}                    → {text, bytes, truncated}   a .csv/.txt/.toml/.json/.jl in the
 //                                                  workspace, for an import to read (its first `limit` bytes, 1 MB)
 //   simulate  {model, stop, vars?, method?, tolerance?, intervals?, start?}
@@ -84,12 +84,14 @@ struct Session {
 // One articula/0 message handled; returns the reply (empty for a message that wants none).
 std::string handle(Omc& omc, const std::string& message, const Session& session = {});
 
-// Export as ▸ one kind of the loaded `model` into `root` (the workspace; the CLI: the current folder), the op
+// Export as ▸ one kind of the loaded `model` to `out`: relative to `root` (the workspace; the CLI: the current
+// folder), or an absolute path or ~/… unless `confined` (a hub: its exports stay in it). The op
 // `transfer`'s work: {kind, model, out, …} → {path, bytes, notes}. kind station {path?, fmu_solver?} |
 // linear-station {set?, at?} | linear {lang, set?, at?} | fmu {fmi, fmuType, fmu_solver} | flat | equations
 // {stage, mathml?, solving?} | results {text}. `set` {name: number} overrides parameters (the operating point),
 // `at` the time to linearise at. Pushes {op: "progress", stage} as it goes.
-nlohmann::json transfer_export(Omc& omc, const nlohmann::json& in, const std::filesystem::path& root, const Session& session = {});
+nlohmann::json transfer_export(Omc& omc, const nlohmann::json& in, const std::filesystem::path& root, bool confined = true,
+                               const Session& session = {});
 
 // omc's <model>_visual.xml (-d=visxml) as [{ident, type, T[9], r[3], r_shape[3], lengthDir[3],
 // widthDir[3], length, width, height, extra, color[3]}]. Each value is a number, or the result

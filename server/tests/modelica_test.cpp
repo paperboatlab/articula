@@ -91,12 +91,17 @@ TEST_CASE("articula/0 passes only allow-listed calls", "[modelica]") {
   CHECK(mo::handle(omc, R"({"id": 7, "op": "nope"})").find("unknown op") != std::string::npos);
 }
 
-TEST_CASE("an export stays in the workspace and sets only name = number", "[transfer]") {
+TEST_CASE("an export stays in a hub, sets only name = number", "[transfer]") {
   mo::Omc omc;  // never started: each refusal comes before omc is asked
   const auto root = std::filesystem::temp_directory_path() / "articula_transfer_test";
   using Catch::Matchers::ContainsSubstring;
-  REQUIRE_THROWS_WITH(mo::transfer_export(omc, {{"kind", "flat"}, {"model", "M"}, {"out", "../../etc/x.mo"}}, root),
-                      ContainsSubstring("inside the workspace"));
+  REQUIRE_THROWS_WITH(mo::transfer_export(omc, {{"kind", "flat"}, {"model", "M"}, {"out", "../../etc/x.mo"}}, root, true),
+                      ContainsSubstring("inside the hub"));
+  REQUIRE_THROWS_WITH(mo::transfer_export(omc, {{"kind", "flat"}, {"model", "M"}, {"out", "/etc/x.mo"}}, root, true),
+                      ContainsSubstring("inside the hub"));
+  // a folder lets it go anywhere: the refusal is then the kind's own, past the path check
+  REQUIRE_THROWS_WITH(mo::transfer_export(omc, {{"kind", "nope"}, {"model", "M"}, {"out", "../elsewhere/x.mo"}}, root, false),
+                      ContainsSubstring("unknown kind"));
   REQUIRE_THROWS_WITH(mo::transfer_export(omc, {{"kind", "linear"}, {"model", "M"}, {"out", "m.jl"}, {"set", {{"a", "1\" -s=x"}}}}, root),
                       ContainsSubstring("name = number"));
   REQUIRE_THROWS_WITH(mo::transfer_export(omc, {{"kind", "linear"}, {"model", "M"}, {"out", "m.jl"}, {"set", {{"a,b", "1"}}}}, root),

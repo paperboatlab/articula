@@ -1169,6 +1169,7 @@ json op_export(Omc& omc, const json& in, const Session& session) {
     std::ifstream f(pst, std::ios::binary);
     out["file"] = stem + ".pst";
     out["pst"] = base64(std::string(std::istreambuf_iterator<char>(f), {}));
+    out["pst_path"] = pst.string();  // for transfer's station export, which copies it into the workspace
   } else {
     // a restart asks for the port it just left, so a paperboat tab on it reconnects
     const int want = in.value("port", 0);
@@ -1849,6 +1850,236 @@ json op_open(Omc& omc, const json& in, const Session& session) {
   return {{"file", file.string()}, {"model", model}, {"workspace", place_json(now)}};
 }
 
+
+// ── Export as ▸ (the kit's TransferDialog; plans/2026-11-27_10-55_articula_export_import.md): writes into the workspace.
+
+// `alpha0=0,u=1` → omc's -override list; names and numbers only, so nothing else reaches the simulator's flags.
+std::string overrides(const json& set) {
+  static const std::regex name(R"([A-Za-z_][A-Za-z0-9_.\[\]]*)"), number(R"([-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?)");
+  std::string out;
+  if (!set.is_object()) return out;
+  for (const auto& [k, v] : set.items()) {
+    const std::string value = v.is_number() ? v.dump() : v.get<std::string>();
+    if (!std::regex_match(k, name) || !std::regex_match(value, number)) throw std::runtime_error("set takes name = number: " + k + " = " + value);
+    out += (out.empty() ? "" : ",") + k + "=" + value;
+  }
+  return out;
+}
+
+std::string slurp(const fs::path& p) {
+  std::ifstream f(p, std::ios::binary);
+  if (!f) throw std::runtime_error("no file " + p.string());
+  return {std::istreambuf_iterator<char>(f), {}};
+}
+
+// omc's linearize at the operating point, its model written in `lang` (julia, python, matlab, modelica): the file.
+fs::path linearize(Omc& omc, const std::string& model, const json& in, const std::string& lang) {
+  static const std::map<std::string, std::string> ext{{"julia", "jl"}, {"python", "py"}, {"matlab", "m"}, {"modelica", "mo"}};
+  if (!ext.contains(lang)) throw std::runtime_error("the language is julia, python, matlab or modelica, not " + lang);
+  const double at = in.value("at", 0.0);
+  const std::string flags = overrides(in.value("set", json::object()));
+  omc.call("setCommandLineOptions(\"--linearizationDumpLanguage=" + lang + "\")");
+  const fs::path file = fs::path(omc.workdir()) / ("linearized_model." + ext.at(lang));
+  std::error_code ec;
+  fs::remove(file, ec);
+  const std::string said = omc.call("linearize(" + model + ", startTime=0, stopTime=" + std::to_string(at) +
+                                    (flags.empty() ? "" : ", simflags=\"-override=" + flags + "\"") + ")",
+                                    std::chrono::minutes(10));
+  omc.call("setCommandLineOptions(\"--linearizationDumpLanguage=modelica\")");
+  if (!fs::is_regular_file(file)) throw std::runtime_error("linearize wrote nothing: " + omc.errors() + "\n" + said);
+  return file;
+}
+
+// The julia dump's matrices and names (`local A = [0 1; …]`, `inputVars = ["u"]`).
+struct Linear {
+  std::vector<std::vector<double>> A, B, C, D;
+  std::vector<std::string> states, inputs, outputs;
+};
+Linear read_linear(const std::string& text) {
+  const auto block = [&](const std::string& key) -> std::string {
+    const std::size_t at = text.find("local " + key + " = [");
+    if (at == std::string::npos) return "";
+    const std::size_t open = text.find('[', at), close = text.find(']', open);
+    return text.substr(open + 1, close - open - 1);
+  };
+  const auto matrix = [&](const std::string& key) {
+    std::vector<std::vector<double>> rows;
+    std::stringstream all(block(key));
+    for (std::string row; std::getline(all, row, ';');) {
+      std::stringstream cells(row);
+      std::vector<double> r;
+      for (std::string c; cells >> c;) r.push_back(std::stod(c));
+      if (!r.empty()) rows.push_back(r);
+    }
+    return rows;
+  };
+  const auto names = [&](const std::string& key) {
+    std::vector<std::string> out;
+    const std::size_t at = text.find(key);  // `inputVars  = ["u"]`: the spaces vary
+    if (at == std::string::npos) return out;
+    const std::size_t open = text.find('[', at);
+    const std::string list = text.substr(open, text.find(']', open) - open);
+    static const std::regex quoted("\"([^\"]*)\"");
+    for (std::sregex_iterator i(list.begin(), list.end(), quoted), e; i != e; ++i) out.push_back((*i)[1]);
+    return out;
+  };
+  return {matrix("A"), matrix("B"), matrix("C"), matrix("D"), names("stateVars"), names("inputVars"), names("outputVars")};
+}
+
+std::string ident(std::string s) {
+  for (auto& c : s) if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') c = '_';
+  return s.empty() || std::isdigit(static_cast<unsigned char>(s[0])) ? "v" + s : s;
+}
+
+// The linear model as a Modelica class the generator turns into a station: x the states' deviation from the
+// operating point, one RealInput per input, one RealOutput per output (deviations too).
+std::string linear_class(const Linear& l, const std::string& name, const std::string& comment) {
+  const std::size_t n = l.A.size(), m = l.inputs.size(), p = l.outputs.size();
+  if (!n || !m || !p) throw std::runtime_error("a linear station needs a state, an input and an output (" + std::to_string(n) + ", " + std::to_string(m) + ", " + std::to_string(p) + ")");
+  const auto mat = [](const std::vector<std::vector<double>>& M, std::size_t r, std::size_t c) {
+    std::ostringstream o;
+    o.precision(17);
+    o << "[";
+    for (std::size_t i = 0; i < r; ++i) {
+      for (std::size_t j = 0; j < c; ++j) o << (j ? ", " : "") << (i < M.size() && j < M[i].size() ? M[i][j] : 0.0);
+      if (i + 1 < r) o << "; ";
+    }
+    return o.str() + "]";
+  };
+  std::ostringstream o;
+  std::vector<std::string> ins, outs;
+  for (const auto& u : l.inputs) ins.push_back(ident(u));
+  for (const auto& y : l.outputs) outs.push_back(ident(y));
+  const auto list = [](const std::vector<std::string>& v) {
+    std::string s;
+    for (const auto& x : v) s += (s.empty() ? "" : ", ") + x;
+    return "{" + s + "}";
+  };
+  std::string states;
+  for (const auto& x : l.states) states += (states.empty() ? "" : ", ") + x;
+  o << "model " << name << " " << quote(comment) << "\n"
+    << "  parameter Real A[" << n << ", " << n << "] = " << mat(l.A, n, n) << ";\n"
+    << "  parameter Real B[" << n << ", " << m << "] = " << mat(l.B, n, m) << ";\n"
+    << "  parameter Real C[" << p << ", " << n << "] = " << mat(l.C, p, n) << ";\n"
+    << "  parameter Real D[" << p << ", " << m << "] = " << mat(l.D, p, m) << ";\n"
+    << "  Real x[" << n << "](each start = 0, each fixed = true) " << quote("from the operating point: " + states) << ";\n";
+  for (const auto& u : ins) o << "  Modelica.Blocks.Interfaces.RealInput " << u << " \"from its value at the operating point\";\n";
+  for (const auto& y : outs) o << "  Modelica.Blocks.Interfaces.RealOutput " << y << " \"from its value at the operating point\";\n";
+  o << "equation\n  der(x) = A * x + B * " << list(ins) << ";\n  " << list(outs) << " = C * x + D * " << list(ins) << ";\nend " << name << ";\n";
+  return o.str();
+}
+
+}  // namespace
+
+// Export as ▸ one kind, into `root` (the workspace; the CLI: the current folder). See server.hpp.
+nlohmann::json transfer_export(Omc& omc, const nlohmann::json& in, const fs::path& root, const Session& session) {
+  const std::string kind = in.value("kind", "");
+  const std::string model = user_model(in);
+  const std::string rel = in.value("out", "");
+  if (rel.empty()) throw std::runtime_error("an export needs out: where it goes in the workspace");
+  const fs::path out = (root / rel).lexically_normal();
+  if (!inside(out, root)) throw std::runtime_error("an export stays inside the workspace: " + rel);
+  fs::create_directories(out.parent_path());
+  const auto stage = [&](const char* s) {
+    if (session.push) session.push(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", s}, {"fraction", 0}}.dump());
+  };
+  const auto copy = [&](const fs::path& from) { fs::copy_file(from, out, fs::copy_options::overwrite_existing); };
+  json notes = json::array();
+  if (kind == "station") {
+    json g = in;
+    g["mode"] = "pst";
+    const json r = op_export(omc, g, session);
+    copy(r.at("pst_path").get<std::string>());
+    notes.push_back(r.value("reason", ""));
+  } else if (kind == "linear") {
+    stage("linearizing");
+    copy(linearize(omc, model, in, in.value("lang", "julia")));
+  } else if (kind == "linear-station") {
+    stage("linearizing");
+    const Linear l = read_linear(slurp(linearize(omc, model, in, "julia")));
+    std::string stem = model.substr(model.rfind('.') == std::string::npos ? 0 : model.rfind('.') + 1) + "Linear";
+    std::string at = overrides(in.value("set", json::object()));
+    const std::string comment = model + " linearised at " + (at.empty() ? "its start" : at) + " (Articula)";
+    const fs::path file = fs::path(omc.workdir()) / (stem + ".mo");
+    std::ofstream(file) << linear_class(l, stem, comment);
+    if (omc.call("loadFile(" + quote(omc.omc_path(file.string())) + ")") != "true") throw std::runtime_error("the linear model didn't load: " + omc.errors());
+    json g = in;
+    g["mode"] = "pst";
+    g["model"] = stem;
+    g["source"] = file.string();
+    g["path"] = "ode";
+    try {
+      const json r = op_export(omc, g, session);
+      copy(r.at("pst_path").get<std::string>());
+    } catch (...) {
+      omc.call("deleteClass(" + stem + ")");
+      throw;
+    }
+    omc.call("deleteClass(" + stem + ")");
+    notes.push_back(std::to_string(l.A.size()) + " states, inputs and outputs from the operating point");
+  } else if (kind == "fmu") {
+    stage("building the FMU");
+    const std::string version = in.value("fmi", "2.0"), type = in.value("fmuType", "cs"), solver = in.value("fmu_solver", "cvode");
+    if (version != "2.0" && version != "3.0") throw std::runtime_error("FMI is 2.0 or 3.0");
+    if (type != "cs" && type != "me") throw std::runtime_error("the FMU is cs or me");
+    if (solver != "cvode" && solver != "euler") throw std::runtime_error("the FMU solver is cvode or euler");
+    if (type == "cs") omc.call("setCommandLineOptions(\"--fmiFlags=s:" + solver + "\")");
+    const OmValue built = parse_value(omc.call("buildModelFMU(" + model + ", version=" + quote(version) + ", fmuType=" + quote(type) +
+                                               ", fileNamePrefix=" + quote(out.stem().string()) + ", platforms={\"static\"})",
+                                               std::chrono::minutes(10)));
+    omc.call("setCommandLineOptions(\"--fmiFlags=\")");
+    if (!fs::is_regular_file(built.atom)) throw std::runtime_error("buildModelFMU failed: " + omc.errors());
+    copy(built.atom);
+  } else if (kind == "flat") {
+    stage("flattening");
+    const std::string text = text_of(omc.call("instantiateModel(" + model + ")", std::chrono::minutes(2)));
+    if (text.empty()) throw std::runtime_error("instantiateModel failed: " + omc.errors());
+    std::ofstream(out, std::ios::binary) << text;
+  } else if (kind == "equations") {
+    stage("flattening");
+    const std::string level = in.value("stage", "backEnd");
+    if (level != "flat" && level != "optimiser" && level != "backEnd") throw std::runtime_error("the stage is flat, optimiser or backEnd");
+    const OmValue dump = parse_value(omc.call("dumpXMLDAE(" + model + ", translationLevel=" + quote(level) +
+                                              ", addMathMLCode=" + (in.value("mathml", false) ? "true" : "false") +
+                                              ", addSolvingInfo=" + (in.value("solving", true) ? "true" : "false") +
+                                              ", fileNamePrefix=" + quote(out.stem().string()) + ")", std::chrono::minutes(5)));
+    if (!dump.is_list || dump.size() < 2 || dump[0].atom != "true") throw std::runtime_error("dumpXMLDAE failed: " + omc.errors());
+    copy(dump[1].atom);
+  } else if (kind == "results") {
+    const std::string text = in.value("text", "");
+    if (text.empty()) throw std::runtime_error("no results: simulate first");
+    std::ofstream(out, std::ios::binary) << text;
+  } else {
+    throw std::runtime_error("export as " + kind + ": unknown kind");
+  }
+  return {{"path", out.lexically_relative(root).generic_string()}, {"bytes", fs::file_size(out)}, {"notes", notes}};
+}
+
+namespace {
+
+json op_transfer(Omc& omc, const json& in, const Session& session) {
+  const Place p = current_place();
+  if (p.kind.empty()) throw std::runtime_error("open a folder or a hub first: an export goes into it");
+  if (in.value("mode", "export") != "export") throw std::runtime_error("transfer exports; an import runs in the app");
+  return transfer_export(omc, in, p.root, session);
+}
+
+// A data file in the workspace, for an import to read (a CSV's columns, a TOML's values): its first `limit` bytes.
+json op_read_data(const json& in) {
+  const Place p = current_place();
+  const fs::path file = (p.root / in.value("file", "")).lexically_normal();
+  if (p.kind.empty() || !inside(file, p.root)) throw std::runtime_error("only a file in the workspace can be read");
+  static const std::set<std::string> ok{".csv", ".txt", ".toml", ".json", ".jl"};
+  if (!ok.contains(file.extension().string())) throw std::runtime_error("read_data reads .csv, .txt, .toml, .json or .jl");
+  const std::size_t limit = std::min<std::size_t>(in.value("limit", 1u << 20), 16u << 20);
+  std::ifstream f(file, std::ios::binary);
+  if (!f) throw std::runtime_error("no file " + file.string());
+  std::string text(limit, '\0');
+  f.read(text.data(), static_cast<std::streamsize>(limit));
+  text.resize(static_cast<std::size_t>(f.gcount()));
+  return {{"text", text}, {"bytes", fs::file_size(file)}, {"truncated", fs::file_size(file) > text.size()}};
+}
+
 }  // namespace
 
 std::string handle(Omc& omc, const std::string& message, const Session& session) {
@@ -1955,6 +2186,10 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_generate(omc, in, session);
     } else if (op == "export") {
       out["result"] = op_export(omc, in, session);
+    } else if (op == "transfer") {
+      out["result"] = op_transfer(omc, in, session);
+    } else if (op == "read_data") {
+      out["result"] = op_read_data(in);
     } else if (op == "simulate") {
       out["result"] = op_simulate(omc, in, session);
     } else {
@@ -1972,7 +2207,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
   // read or write files never start omc for it (the Start page needs none), nor does `open` with nothing to open.
   static const std::set<std::string> disk_only = {"workspace", "open_folder", "connect", "close_workspace", "tree", "recent",
                                                   "recent_forget", "settings", "settings_write", "config", "config_write", "about",
-                                                  "git", "hubs", "hub_files", "hub_new", "hub_open_malachite", "open_simplicial"};
+                                                  "git", "hubs", "hub_files", "hub_new", "hub_open_malachite", "open_simplicial", "read_data"};
   if (!errors_read && !disk_only.contains(op) && !omc.version().empty()) {  // a never-started omc has said nothing
     try {
       if (omc.last_messages().empty()) omc.messages();

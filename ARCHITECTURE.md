@@ -37,7 +37,8 @@ flowchart LR
   the network for library downloads). Also the allow-list (`allowed`) and omc's value parser.
 - `server/src/server.cpp`, `include/articula/server.hpp`: the HTTP/WebSocket server (ixwebsocket) and
   every `articula/0` op (open, class files, save, check, icon, set_icon, simulate, cancel, packages,
-  generate/export (`export` serve: `paperboat run` the station; `open_simplicial`: Simplicial's page on it,
+  generate/export (`export` serve: `paperboat run` the station; `transfer`: Export as ▸ into the workspace, the
+  same `transfer_export` the `articula export` CLI runs; `read_data`: a data file an import reads; `open_simplicial`: Simplicial's page on it,
   `?station=ws://localhost:<port>`, from `paperboat app open simplicial --start --no-open --json`), the hubs: `hubs` from `paperboat hub list --json`, `hub_files`, `hub_new`,
   `hub_open_malachite`), and the one file workflow: the workspace (`workspace`, `open_folder`, `connect`,
   `close_workspace`, `tree`; `Omc::set_project` moves the lease with it, and an `open` from outside switches
@@ -65,7 +66,9 @@ flowchart LR
 - `src/canvas/` the diagram (the kit's canvas and its `CanvasTools`), `src/icon/` the icon editor and `art.tsx`
   (a library class's `art` drawn whole and restyled by rule, in the kit plate's place), `src/library/` the
   library browser, `src/split/` the flat model and the generated C++, `src/simulate/` setup, plot and the
-  variables browser, `src/viewport3d/` MultiBody shapes, `src/sheet/`, `src/popover/`, `src/dock/`.
+  variables browser, `src/viewport3d/` MultiBody shapes, `src/sheet/`, `src/popover/`, `src/dock/`,
+  `src/transfer/` Export as ▸ and Import ▸ on the kit's `TransferDialog` (an export is the server's `transfer`;
+  an import is edits to the open model through the store, so it undoes).
 
 ## 3. Invariants
 

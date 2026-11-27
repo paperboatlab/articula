@@ -8,7 +8,8 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { About, AppMark, Icon, Key, MenuBar, Notifications, Panel, PanelsKey, RuntimesKey, Search, Segmented, ScaleSetting, SettingRow, Settings, SettingsSection, ShortcutList, Split as Gutter, ThemeSetting, Toasts, WindowKeys, isScale, readStored, useScale, useToasts, writeStored, type PaneRect, type Scale, type SearchItem, type Theme } from "@paperboatlab/ui";
 import { HelpWindow } from "@paperboatlab/ui";
 import { afterClose, EditorSettingsPane, EditorTabs, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
-import { helpCommand, SEARCH_CHORD, useShortcuts, type Command } from "@paperboatlab/ui";
+import { helpCommand, SEARCH_CHORD, transferMenu, useShortcuts, type Command, type TransferMode } from "@paperboatlab/ui";
+import { ArticulaTransfer, exportKinds, importKinds, type Run as TransferRun } from "./transfer/Transfer.tsx";
 import { omHelp } from "./shell/help.ts";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { ConnectHub, OpenFile, SaveFile, type Hub } from "@paperboatlab/ui/hub";
@@ -16,7 +17,6 @@ import { AskOpen, baseName, fileMenu, parseRecent, parseSettings, recentFor, rec
 import type { FileEntry } from "@paperboatlab/ui/files";
 import { useAppConfig as useSqueroConfig, type ConfigStore } from "@paperboatlab/ui/editor";
 import { Canvas } from "./canvas/Canvas.tsx";
-import { runStationExport } from "./dock/dock.ts";
 import { StudioDock } from "./dock/index.tsx";
 import { Library, useClassIndex } from "./library/Library.tsx";
 import { PackageWindow } from "@paperboatlab/ui/packages";
@@ -140,6 +140,11 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   // Documents and their folder listings read once: switching back is a state restore, not omc again.
   const modelCache = useRef(new Map<string, StudioModel>());
   const [shapeRun, setShapeRun] = useState<ShapeRun | null>(null);
+  // Export as ▸ / Import ▸ (the kit's TransferDialog): open on a kind, else the one used last (Ctrl E)
+  const [transfer, setTransfer] = useState<{ mode: TransferMode; kind?: string } | null>(null);
+  const [lastRun, setLastRun] = useState<TransferRun | null>(null);
+  const lastKind = useRef(readStored("articula.transfer", (v): v is Record<string, string> => typeof v === "object" && v !== null) ?? {});
+  const openTransfer = (mode: TransferMode, kind?: string) => setTransfer({ mode, kind: kind ?? lastKind.current[mode] });
   // The editor settings, from the user's articula.toml; the theme is every app's, in $PAPERBOAT_HOME/settings.json
   // (read again when the window comes back: another app may have changed it), cached here against a flash.
   const settings = useSqueroConfig(config, { editor: "articula.editor", theme: "paperboat.theme" });
@@ -668,24 +673,6 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     });
   };
 
-  const handleExportStation = async () => {
-    if (!api) return;
-    if (!exportReady) {
-      say(exportWhy, "error");
-      return;
-    }
-    await saveCurrent();
-    const id = show({ title: `Exporting ${api.model.name}`, detail: "packing the station", state: "working" });
-    const outcome = await runStationExport(api, "pst", () => {});
-    if (outcome.ok) {
-      say(`Exported ${outcome.line}`);
-      show({ id, title: `Exported ${api.model.name}`, detail: outcome.line, state: "done" });
-    } else {
-      say(`Export failed: ${outcome.line}`, "error");
-      show({ id, title: "Export failed", detail: outcome.line, state: "failed" });
-    }
-  };
-
   const openConsole = (tab: ConsoleTab) => {
     setConsoleTab(tab);
     setConsoleShown(true);
@@ -793,15 +780,17 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     },
     {
       id: "file.export",
-      label: "Export station…",
+      label: "Export…",
       menu: "model",
       group: "export",
       shortcut: "Ctrl E",
       chord: { key: "e", ctrl: true },
-      enabled: exportReady,
-      why: exportWhy || undefined,
-      run: () => void handleExportStation(),
+      enabled: !!model && !!place,
+      why: place ? "open a model first" : "open a folder or a hub first: an export goes into it",
+      run: () => openTransfer("export"),
     },
+    { ...transferMenu("export", exportKinds({ model, stationWhy: exportWhy || undefined, run: lastRun }), openTransfer), menu: "model", group: "export", enabled: !!model && !!place, why: "open a model first" },
+    { ...transferMenu("import", importKinds(model), openTransfer), menu: "model", group: "export", enabled: !!model && !!place, why: "open a model first" },
 
     // Edit menu
     { id: "undo", label: "Undo", menu: "edit", group: "history", shortcut: "Ctrl Z", enabled: actions.canUndo, run: actions.undo },
@@ -1011,7 +1000,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                 { value: "scopes", label: "Plots", hint: "The plots fill the card" },
               ]} />}>
               <Split model={model} actions={actions} view={view} onView={setView} settings={settings.editor} appTheme={shown} />
-              <Simulate actions={actions} model={model} onToast={show} onRunningChange={setRunning} onRun={(r) => setShapeRun(r.shapes?.length ? r : null)} />
+              <Simulate actions={actions} model={model} onToast={show} onRunningChange={setRunning} onRun={(r) => (setShapeRun(r.shapes?.length ? r : null), setLastRun(r))} />
             </Panel>
             </Gutter>
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
@@ -1050,6 +1039,14 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             onSave={() => { const go = unsaved.then; setUnsaved(null); void saveCurrent().then(() => go(true), (e) => fail(e, "Couldn't save")); }}
             onDiscard={() => { const go = unsaved.then; setUnsaved(null); void go(false); }}
             onClose={() => setUnsaved(null)} />
+        )}
+        {transfer && place && (
+          <ArticulaTransfer mode={transfer.mode} kind={transfer.kind} omc={omc} api={api} model={model} root={place.root} run={lastRun}
+            stationWhy={exportWhy || undefined}
+            onKind={(m, k) => { lastKind.current = { ...lastKind.current, [m]: k }; writeStored("articula.transfer", lastKind.current); }}
+            onDone={(title, detail, mode) => { say(`${title}: ${detail}`); show({ title, detail, state: "done" }); if (mode === "export") refreshWorkspace(); }}
+            onFail={(e, mode) => fail(e, mode === "export" ? "Export failed" : "Import failed")}
+            onClose={() => setTransfer(null)} />
         )}
         {promptModal && (
           <PromptModal
@@ -1104,7 +1101,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               </SettingsSection>
               <SettingsSection title="Export">
                 <SettingRow label="Station" hint="A model or block becomes a Paperboat station (.pst) for Simplicial">
-                  <Key size="sm" disabled={!exportReady} title={exportWhy || undefined} onClick={() => (setSettingsPage(null), void handleExportStation())}>Export station…</Key>
+                  <Key size="sm" disabled={!exportReady} title={exportWhy || undefined} onClick={() => (setSettingsPage(null), openTransfer("export", "station"))}>Export station…</Key>
                 </SettingRow>
               </SettingsSection>
             </> },

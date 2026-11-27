@@ -510,6 +510,7 @@ const std::vector<std::string>& allowed_calls() {
       "deleteConnection", "setComponentModifierValue", "list", "dumpXMLDAE", "buildModelFMU", "getVersion",
       "getErrorString",  // read-only, how a client words a failed call
       "isPartial", "getSourceFile", "getClassComment", "getDocumentationAnnotation",  // read-only: the library tree, open and Help
+      "uriToFilename",  // read-only: where a modelica:// URI points (an import writes a file as one)
       "getComponentModifierNames", "getNthConnectionAnnotation", "getParameterNames", "getParameterValue",  // read-only: the canvas
       "setParameterValue", "setComponentProperties", "updateComponent", "updateConnection"};  // edits, like the rest, of the class named
   return calls;
@@ -542,8 +543,10 @@ bool allowed(std::string_view expr) {
       } else if (is_call) {
         const std::string_view last = ident.substr(ident.rfind('.') == std::string_view::npos ? 0 : ident.rfind('.') + 1);
         const bool record = !last.empty() && std::isupper(static_cast<unsigned char>(last[0]));
-        if (!listed(last) && !record && last != "transformation" && last != "iconTransformation") return false;
-        if (!record && ident.find('.') != std::string_view::npos) return false;  // OpenModelica.Scripting.x(…)
+        // a table's file as a modifier: loadResource only resolves a modelica:// URI (Import ▸ Data table)
+        const bool resource = ident == "Modelica.Utilities.Files.loadResource";
+        if (!resource && !listed(last) && !record && last != "transformation" && last != "iconTransformation") return false;
+        if (!resource && !record && ident.find('.') != std::string_view::npos) return false;  // OpenModelica.Scripting.x(…)
       }
       continue;
     }

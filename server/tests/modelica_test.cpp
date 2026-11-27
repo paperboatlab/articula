@@ -71,6 +71,10 @@ TEST_CASE("articula/0 passes only allow-listed calls", "[modelica]") {
   CHECK(mo::allowed("getSimulationOptions(M)"));  // Simulate starts from experiment(StopTime)
   CHECK(mo::allowed("addComponent(r1, Modelica.Electrical.Analog.Basic.Resistor, M, "
                     "annotate=Placement(transformation(extent={{-10,-10},{10,10}})))"));
+  // Import ▸ Data table writes its file as a modelica:// URI through loadResource, nested in the modifier
+  CHECK(mo::allowed(R"(setComponentModifierValue(M, table.fileName, $Code(=Modelica.Utilities.Files.loadResource("modelica://M/data/x.csv"))))"));
+  CHECK(mo::allowed(R"(uriToFilename("modelica://M/"))"));
+  CHECK_FALSE(mo::allowed(R"(setComponentModifierValue(M, t.fileName, $Code(=Modelica.Utilities.Files.loadResourceX("x"))))"));
   CHECK_FALSE(mo::allowed(R"(system("ls"))"));
   CHECK_FALSE(mo::allowed(R"(runScript("x.mos"))"));
   CHECK_FALSE(mo::allowed(R"(getClassNames(); system("ls"))"));
@@ -85,6 +89,26 @@ TEST_CASE("articula/0 passes only allow-listed calls", "[modelica]") {
   const std::string system_call = R"j({"id": 7, "op": "omc", "expr": "system(\"ls\")"})j";
   CHECK(mo::handle(omc, system_call).find(R"("ok":false)") != std::string::npos);
   CHECK(mo::handle(omc, R"({"id": 7, "op": "nope"})").find("unknown op") != std::string::npos);
+}
+
+TEST_CASE("an export stays in the workspace and sets only name = number", "[transfer]") {
+  mo::Omc omc;  // never started: each refusal comes before omc is asked
+  const auto root = std::filesystem::temp_directory_path() / "articula_transfer_test";
+  using Catch::Matchers::ContainsSubstring;
+  REQUIRE_THROWS_WITH(mo::transfer_export(omc, {{"kind", "flat"}, {"model", "M"}, {"out", "../../etc/x.mo"}}, root),
+                      ContainsSubstring("inside the workspace"));
+  REQUIRE_THROWS_WITH(mo::transfer_export(omc, {{"kind", "linear"}, {"model", "M"}, {"out", "m.jl"}, {"set", {{"a", "1\" -s=x"}}}}, root),
+                      ContainsSubstring("name = number"));
+  REQUIRE_THROWS_WITH(mo::transfer_export(omc, {{"kind", "linear"}, {"model", "M"}, {"out", "m.jl"}, {"set", {{"a,b", "1"}}}}, root),
+                      ContainsSubstring("name = number"));
+  REQUIRE_THROWS_WITH(mo::transfer_export(omc, {{"kind", "flat"}, {"model", "Modelica.Blocks.Math.Gain"}, {"out", "g.mo"}}, root),
+                      ContainsSubstring("not a model"));
+  REQUIRE_THROWS_WITH(mo::transfer_export(omc, {{"kind", "linear"}, {"model", "M"}, {"out", "m.x"}, {"lang", "fortran"}}, root),
+                      ContainsSubstring("julia, python, matlab or modelica"));
+  // the transfer op needs a workspace to export into
+  mo::handle(omc, R"({"id": 1, "op": "close_workspace"})");  // an earlier test may have left one open
+  CHECK(mo::handle(omc, R"({"id": 1, "op": "transfer", "kind": "flat", "model": "M", "out": "m.mo"})").find("open a folder or a hub first") != std::string::npos);
+  std::filesystem::remove_all(root);
 }
 
 TEST_CASE("Modelica expressions become C++", "[modelica]") {

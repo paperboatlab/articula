@@ -116,7 +116,7 @@ body { background: var(--surface-ground); color: var(--text); font: var(--size-s
 /* ---- New Class sheet (#43) --------------------------------------------------------- */
 .new-class-overlay { position: fixed; inset: 0; z-index: 110; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgb(0 0 0 / .22); }
 .new-class-sheet {
-  width: min(800px, calc(100vw - 48px)); max-height: calc(100vh - 48px);
+  width: min(800px, calc(100vw / var(--page-zoom, 1) - 48px)); max-height: calc(100vh / var(--page-zoom, 1) - 48px);
   display: flex; flex-direction: column;
   background: var(--surface-panel); border: 1.5px solid var(--line-ink);
   border-radius: var(--radius-lg); box-shadow: var(--shadow-2);

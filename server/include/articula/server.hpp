@@ -26,8 +26,8 @@
 //                                                  the workspace as a tree of .mo classes and packages
 //   recent    {}                                → {version, recent:[{kind, path, hub?, app, at}], home}
 //   recent_forget {kind?, path?}                → recent             one entry gone, or all (Clear recent)
-//   settings  {}                                → {version, theme}   $PAPERBOAT_HOME/settings.json
-//   settings_write {theme}                      → settings
+//   settings  {}                                → {version, theme, scale}   $PAPERBOAT_HOME/settings.json
+//   settings_write {theme?, scale?}             → settings
 //   hubs, hub_files {root}, hub_new {name}, hub_open_malachite {root}: the hubs (`paperboat hub list --json`)
 //   create_class {file, name, kind, within?, base?}
 //                                              → {file, model}      write a class file; append package.order

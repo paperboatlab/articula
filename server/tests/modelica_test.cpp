@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -544,13 +545,22 @@ json op(mo::Omc& omc, json request, const mo::Session& session = {}) {
 struct Store {
   fs::path home = fs::temp_directory_path() / "articula-store-test" / "home";
   fs::path hub = fs::temp_directory_path() / "articula-store-test" / "hubs" / "tank-lab";
+  // a paperboat-examples checkout: an Articula example, and a Malachite one that is a hub
+  fs::path example = fs::temp_directory_path() / "articula-store-test" / "paperboat-examples" / "modelica" / "01-decay";
+  fs::path example_hub = fs::temp_directory_path() / "articula-store-test" / "paperboat-examples" / "hubs" / "lab";
   Store() {
     fs::remove_all(home.parent_path());
     fs::create_directories(hub);
     const fs::path bin = home.parent_path() / "paperboat";
-    std::ofstream(bin) << "#!/bin/sh\n[ \"$1\" = example ] && printf '%s\\n' \"$@\" > " << (home.parent_path() / "example-args").string() << "\n"
+    fs::create_directories(example);
+    fs::create_directories(example_hub);
+    std::ofstream(bin) << "#!/bin/sh\n[ \"$*\" != \"example list --json\" ] && [ \"$1\" = example ] && printf '%s\\n' \"$@\" > " << (home.parent_path() / "example-args").string() << "\n"
                        << "[ \"$1 $2\" = \"hub list\" ] && echo '[{\"id\": \"h1\", \"name\": \"tank-lab\", \"path\": \"" << hub.string()
-                       << "\", \"place\": \"local\", \"shown\": \"~/hubs/tank-lab\"}]'\n"
+                       << "\", \"place\": \"local\", \"shown\": \"~/hubs/tank-lab\"}, {\"id\": \"hx\", \"name\": \"lab\", \"path\": \"" << example_hub.string()
+                       << "\", \"place\": \"local\", \"shown\": \"lab\"}]'\n"
+                       // every app's examples, where they are: the read-only folders (paperboat#75)
+                       << "[ \"$*\" = \"example list --json\" ] && echo '[{\"id\": \"modelica/01-decay\", \"app\": \"articula\", \"name\": \"01 Decay\", \"path\": \""
+                       << example.string() << "\"}, {\"id\": \"hubs/lab\", \"app\": \"malachite\", \"name\": \"Lab\", \"path\": \"" << example_hub.string() << "\"}]'\n"
                        << "[ \"$1 $2 $3\" = \"app open simplicial\" ] && echo '{\"app\": \"simplicial\", \"url\": \"http://127.0.0.1:30471/\"}'\n"
                        << "[ \"$*\" = \"example list --app articula --json\" ] && echo '[{\"id\": \"modelica/01-decay\", \"app\": \"articula\", "
                        << "\"kind\": \"modelica\", \"name\": \"01 Decay\", \"description\": \"exponential decay\", \"path\": \"/ex/modelica/01-decay\"}]'\n"
@@ -646,6 +656,7 @@ end Decay;
   const mo::Session session{[&](const std::string& text) { pushed.push_back(json::parse(text)); }, file};
 
   const json opened = op(omc, {{"id", 1}, {"op", "open"}, {"file", file.string()}}, session);
+  INFO(opened.dump());
   REQUIRE(opened["ok"] == true);
   CHECK(opened["result"]["model"] == "Decay");
   // the open says its steps for the splash: omc's session, (the MSL when not loaded yet,) the file
@@ -1150,6 +1161,152 @@ TEST_CASE("examples: open --to the current folder and the banner's copy, the fol
   CHECK(op(omc, {{"op", "example_copy"}, {"id", "x;id"}, {"to", to.string()}})["ok"] == false);
   CHECK(op(omc, {{"op", "example_open"}, {"id", "modelica/01-decay"}, {"to", "-rf"}})["ok"] == false);
   CHECK_FALSE(fs::exists(args_file));
+}
+
+// Every file under `root` and its bytes: the same before and after means nothing was written, made or removed.
+static std::map<std::string, std::string> snapshot(const fs::path& root) {
+  std::map<std::string, std::string> out;
+  for (const auto& e : fs::recursive_directory_iterator(root))
+    out[fs::relative(e.path(), root).generic_string()] = e.is_regular_file() ? read_text(e.path()) : std::string("<dir>");
+  return out;
+}
+
+TEST_CASE("an example opened in place is read-only: every write is refused, a run leaves it byte for byte (paperboat#75)", "[articula]") {
+  const Store store;
+  mo::Omc omc;  // never started: each refusal comes before omc
+  const fs::path ex = store.example, checkout = ex.parent_path().parent_path();
+  // as paperboat-examples' modelica/ ones are: a model at the top, a package beside it (03-tank-loop's Basics)
+  std::ofstream(ex / "Plant.mo") << "model Plant\n  Real x(start = 1);\nequation\n  der(x) = -x;\nend Plant;\n";
+  fs::create_directories(ex / "Sub");
+  std::ofstream(ex / "Sub" / "package.mo") << "package Sub\nend Sub;\n";
+  std::ofstream(ex / "Sub" / "package.order") << "Tank\n";
+  std::ofstream(ex / "Sub" / "Tank.mo") << "within Sub;\nmodel Tank\nend Tank;\n";
+  std::ofstream(ex / "data.csv") << "time,u\n0,1\n";
+  // a checkout as paperboat-examples is: committed, so `git status` says whether anything changed
+  const std::string git = "git -C '" + checkout.string() + "' ";
+  const bool have_git = std::system((git + "init -q && " + git + "add -A && " + git + "-c user.name=t -c user.email=t@t commit -qm ex").c_str()) == 0;
+  const auto before = snapshot(ex);
+  const fs::path exports = store.home.parent_path() / "articula-home";
+  setenv("ARTICULA_WORKSPACE", exports.c_str(), 1);
+
+  // opened in place (`paperboat example open` starts the server on its folder): the server knows it is one
+  const json opened = op(omc, {{"op", "open_folder"}, {"path", ex.string()}});
+  REQUIRE(opened["ok"] == true);
+  CHECK(opened["result"]["root"] == ex.string());
+  CHECK(opened["result"]["example"]["id"] == "modelica/01-decay");
+  CHECK(opened["result"]["example"]["name"] == "01 Decay");
+  CHECK(op(omc, {{"op", "workspace"}})["result"]["example"]["id"] == "modelica/01-decay");
+  // …and it stays out of the recent list (its Copy is the user's)
+  CHECK_FALSE(fs::exists(store.home / "recent.json"));
+
+  const std::string plant = (ex / "Plant.mo").string();
+  const auto refused = [&](const json& request) {
+    const json r = op(omc, request);
+    CHECK(r["ok"] == false);
+    CHECK_THAT(r.value("error", ""), Catch::Matchers::ContainsSubstring("01 Decay is an example"));
+  };
+  refused({{"op", "create_class"}, {"file", (ex / "New.mo").string()}, {"name", "New"}, {"within", ""}});
+  refused({{"op", "new_package"}, {"parent", ex.string()}, {"name", "More"}, {"within", ""}});
+  refused({{"op", "create_class"}, {"file", (ex / "Sub" / "Pipe.mo").string()}, {"name", "Pipe"}, {"within", "Sub"}});
+  refused({{"op", "duplicate_class"}, {"file", plant}, {"name", "Plant"}, {"newName", "Plant2"}, {"within", ""}});
+  refused({{"op", "rename_class"}, {"file", plant}, {"name", "Plant"}, {"newName", "Tank"}, {"within", ""}});
+  refused({{"op", "delete_class"}, {"file", plant}, {"name", "Plant"}});
+  refused({{"op", "delete_package"}, {"dir", (ex / "Sub").string()}, {"root", ex.string()}});
+  refused({{"op", "move_class"}, {"file", plant}, {"targetDir", (ex / "Sub").string()}, {"within", "Sub"}});
+  refused({{"op", "save"}, {"model", "Plant"}, {"file", plant}, {"content", "model Plant end Plant;"}});
+  refused({{"op", "save"}, {"model", "Plant"}, {"file", (ex / "Saved.mo").string()}});  // Save as into it
+  refused({{"op", "open"}, {"file", (ex / "Dropped.mo").string()}, {"content", "model Dropped end Dropped;"}});  // a drop
+  refused({{"op", "open"}, {"file", "Fresh.mo"}});  // New model: a bare name lands in the workspace
+  refused({{"op", "generate"}, {"source", plant}, {"model", "Plant"}, {"out", (ex / "build").string()}});
+  refused({{"op", "transfer"}, {"mode", "export"}, {"kind", "results"}, {"model", "Plant"}, {"out", plant}, {"text", "t\n0\n"}, {"replace", true}});
+  refused({{"op", "example_copy"}, {"id", "modelica/01-decay"}, {"to", ex.string()}});
+  // the canvas's edits, through the allow-list: none on an example's model
+  refused({{"op", "omc"}, {"expr", "addComponent(r1, Modelica.Electrical.Analog.Basic.Resistor, Plant)"}});
+  refused({{"op", "omc"}, {"expr", "setComponentModifierValue(Plant, x.start, $Code(=2))"}});
+  refused({{"op", "omc"}, {"expr", "updateComponent(r1, Modelica.Electrical.Analog.Basic.Resistor, Plant, annotate=Placement())"}});
+
+  // an export from an example goes to Articula's own folder, exports/<its folder>: a relative path too
+  const json exported = op(omc, {{"op", "transfer"}, {"mode", "export"}, {"kind", "results"}, {"model", "Plant"}, {"out", "runs/plant.csv"}, {"text", "time,x\n0,1\n"}});
+  REQUIRE(exported["ok"] == true);
+  CHECK(read_text(exports / "exports" / "01-decay" / "runs" / "plant.csv") == "time,x\n0,1\n");
+  CHECK(op(omc, {{"op", "workspace"}})["result"]["example"]["exports"] == (exports / "exports" / "01-decay").string());
+  // reading it is fine
+  CHECK(op(omc, {{"op", "read_file"}, {"file", plant}})["ok"] == true);
+  CHECK(op(omc, {{"op", "read_data"}, {"file", "data.csv"}})["ok"] == true);
+  CHECK(op(omc, {{"op", "tree"}})["ok"] == true);
+  CHECK(op(omc, {{"op", "git"}, {"root", ex.string()}})["ok"] == true);
+
+  // an example's hub (Malachite's) is no hub of the user's: not listed, not a hub to open
+  const json hubs = op(omc, {{"op", "hubs"}})["result"];
+  REQUIRE(hubs.size() == 1);
+  CHECK(hubs[0]["id"] == "h1");
+  CHECK(op(omc, {{"op", "connect"}, {"hub", "hx"}})["ok"] == false);
+  const json lab = op(omc, {{"op", "open_folder"}, {"path", store.example_hub.string()}})["result"];
+  CHECK(lab["kind"] == "folder");
+  CHECK(lab["example"]["id"] == "hubs/lab");
+
+  // the example is as it was, byte for byte, and git sees nothing
+  CHECK(snapshot(ex) == before);
+  if (have_git) {
+    const fs::path status = store.home.parent_path() / "git-status";
+    REQUIRE(std::system((git + "status --porcelain --untracked-files=all > '" + status.string() + "'").c_str()) == 0);
+    CHECK(read_text(status).empty());
+  }
+
+  // its copy is the user's: a normal folder, written as any other, and recorded
+  const fs::path mine = store.home.parent_path() / "mine";
+  fs::create_directories(mine);
+  REQUIRE(op(omc, {{"op", "example_copy"}, {"id", "modelica/01-decay"}, {"to", mine.string()}})["ok"] == true);
+  fs::copy(ex, mine / "01-decay", fs::copy_options::recursive | fs::copy_options::overwrite_existing);  // what the CLI copies
+  const json copy = op(omc, {{"op", "open_folder"}, {"path", (mine / "01-decay").string()}})["result"];
+  CHECK_FALSE(copy.contains("example"));
+  CHECK(op(omc, {{"op", "create_class"}, {"file", (mine / "01-decay" / "New.mo").string()}, {"name", "New"}, {"within", ""}})["ok"] == true);
+  CHECK(op(omc, {{"op", "rename_class"}, {"file", (mine / "01-decay" / "Plant.mo").string()}, {"name", "Plant"}, {"newName", "Tank"}, {"within", ""}})["ok"] == true);
+  CHECK(json::parse(read_text(store.home / "recent.json"))["recent"][0]["path"] == (mine / "01-decay").string());
+  unsetenv("ARTICULA_WORKSPACE");
+}
+
+TEST_CASE("running an example in place (check, flatten, generate, simulate, export) writes nothing into it (paperboat#75)", "[articula][omc]") {
+  if (!have_omc()) SKIP("omc not installed");
+  const Store store;
+  const fs::path ex = store.example, checkout = ex.parent_path().parent_path();
+  // paperboat-examples' modelica/01-decay, as it is
+  std::ofstream(ex / "Decay.mo") << "model Decay \"Exponential decay\"\n  parameter Real k = 2;\n  Real x(start = 1, fixed = true);\n"
+                                 << "equation\n  der(x) = -k * x;\n  annotation(experiment(StopTime = 1));\nend Decay;\n";
+  std::ofstream(ex / "README.md") << "# 01 Decay\n";
+  const std::string git = "git -C '" + checkout.string() + "' ";
+  const bool have_git = std::system((git + "init -q && " + git + "add -A && " + git + "-c user.name=t -c user.email=t@t commit -qm ex").c_str()) == 0;
+  const auto before = snapshot(ex);
+  const fs::path exports = store.home.parent_path() / "articula-home";
+  setenv("ARTICULA_WORKSPACE", exports.c_str(), 1);
+
+  mo::Omc omc;
+  REQUIRE(op(omc, {{"op", "open_folder"}, {"path", ex.string()}})["result"]["example"]["id"] == "modelica/01-decay");
+  const std::string file = (ex / "Decay.mo").string();
+  const json opened = op(omc, {{"op", "open"}, {"file", file}});
+  INFO(opened.dump());
+  REQUIRE(opened["ok"] == true);
+  CHECK(op(omc, {{"op", "check_model"}, {"model", "Decay"}})["ok"] == true);
+  CHECK(op(omc, {{"op", "instantiate_model"}, {"model", "Decay"}})["ok"] == true);
+  CHECK(op(omc, {{"op", "generate"}, {"source", file}, {"model", "Decay"}, {"dry", true}})["ok"] == true);
+  const json sim = op(omc, {{"op", "simulate"}, {"model", "Decay"}, {"stop", 1.0}, {"vars", {"x"}}});
+  INFO(sim.dump());
+  CHECK(sim["ok"] == true);
+  const json flat = op(omc, {{"op", "transfer"}, {"mode", "export"}, {"kind", "flat"}, {"model", "Decay"}, {"out", "out/Decay-flat.mo"}});
+  INFO(flat.dump());
+  CHECK(flat["ok"] == true);
+  CHECK(fs::is_regular_file(exports / "exports" / "01-decay" / "out" / "Decay-flat.mo"));
+  // the edits a page could send, and a save: refused
+  CHECK(op(omc, {{"op", "omc"}, {"expr", "setParameterValue(Decay, k, 5)"}})["ok"] == false);
+  CHECK(op(omc, {{"op", "save"}, {"model", "Decay"}})["ok"] == false);
+
+  CHECK(snapshot(ex) == before);
+  if (have_git) {
+    const fs::path status = store.home.parent_path() / "git-status";
+    REQUIRE(std::system((git + "status --porcelain --untracked-files=all --ignored > '" + status.string() + "'").c_str()) == 0);
+    CHECK(read_text(status).empty());
+  }
+  unsetenv("ARTICULA_WORKSPACE");
 }
 
 TEST_CASE("settings.json holds the theme every app starts in", "[articula]") {

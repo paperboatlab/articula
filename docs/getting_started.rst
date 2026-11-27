@@ -33,7 +33,9 @@ To start from a working model, type ``example`` in :kbd:`Ctrl K`: **Open example
 Paperboat's Modelica examples (``paperboat example list --app articula``) and opens one where it is, in
 a new window (``paperboat example open <id>``). A line at the top of its stage says it is an example:
 run it as it is, or **copy it to** the folder you opened it from (or, from the Start page, a folder you
-pick) to change it. The copy (``paperboat example copy <id> --to <folder>``) goes into a folder of the
+pick) to change it. An example is read-only: its diagram, text and files take no edit, and nothing is saved
+into it. Checking and simulating it write nothing there; an export goes to
+``~/Documents/paperboat/articula/exports/<example>`` unless you give it another path. The copy (``paperboat example copy <id> --to <folder>``) goes into a folder of the
 example's name there and opens in its own window; it is refused when that folder is there already.
 An example from GitHub's copy is replaced after a day, so changes made to it there aren't kept.
 Without the Paperboat CLI the list is empty.

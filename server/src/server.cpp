@@ -208,6 +208,71 @@ std::string user_model(const json& in) {
   return model;
 }
 
+// ── Examples are read-only (paperboat#75): one opened in place is run as it is, never changed; its Copy is
+// the user's to change. Where they are is the platform's word (`paperboat example list --json`, every app's,
+// and GitHub's cached copy under $PAPERBOAT_HOME/cache/examples), not the page's URL, so a write is refused
+// here whichever way it came: an op, an export, an open that would make a file.
+
+std::string paperboat_output(const std::string& args);
+fs::path paperboat_home();
+
+struct ExampleAt {
+  fs::path root;
+  std::string id, name;
+};
+
+// A path as the disk has it (symlinks resolved, as far as it exists), to compare with a root.
+fs::path real_path(const fs::path& p) {
+  std::error_code ec;
+  const fs::path r = fs::weakly_canonical(fs::absolute(p), ec);
+  return ec ? fs::absolute(p).lexically_normal() : r;
+}
+
+bool at_or_inside(const fs::path& path, const fs::path& root) {
+  const fs::path rel = path.lexically_relative(root);
+  return !rel.empty() && *rel.begin() != "..";  // "." is the root itself
+}
+
+std::mutex examples_mutex;
+std::optional<std::vector<ExampleAt>> examples_known;
+
+// The examples' folders, read once and again when the workspace switches (`refresh`).
+std::vector<ExampleAt> example_folders(bool refresh = false) {
+  std::lock_guard lock(examples_mutex);
+  if (examples_known && !refresh) return *examples_known;
+  std::vector<ExampleAt> out;
+  try {
+    const json list = json::parse(paperboat_output("example list --json"));
+    if (list.is_array())
+      for (const json& x : list)
+        if (x.is_object() && x.contains("path") && x["path"].is_string() && !x["path"].get<std::string>().empty())
+          out.push_back({real_path(x["path"].get<std::string>()), x.value("id", ""), x.value("name", x.value("id", ""))});
+  } catch (const json::exception&) {
+    // no paperboat: only the cache below
+  }
+  out.push_back({real_path(paperboat_home() / "cache" / "examples"), "", ""});  // GitHub's copy, all of it
+  examples_known = out;
+  return out;
+}
+
+// The example `path` is in (or is), else none.
+std::optional<ExampleAt> example_at(const fs::path& path) {
+  if (path.empty()) return std::nullopt;
+  const fs::path p = real_path(path);
+  for (const ExampleAt& x : example_folders())
+    if (at_or_inside(p, x.root)) return x;
+  return std::nullopt;
+}
+
+std::string example_words(const ExampleAt& x) {
+  return (x.name.empty() ? x.root.filename().string() : x.name) + " is an example: it opens read-only. Copy it to a folder to change it";
+}
+
+// Throws when `path` lies in an example: nothing there is written, made, moved or removed.
+void refuse_in_example(const fs::path& path) {
+  if (const auto x = example_at(path)) throw std::runtime_error(example_words(*x));
+}
+
 // `stage` hears the steps an open waits on (the page's splash): "library" before the MSL loads.
 using Stage = std::function<void(const char*)>;
 
@@ -445,6 +510,7 @@ json op_create_class(const json& in) {
   if (!base.empty() && !qualified_name(base)) throw std::runtime_error("not a base class: " + base);
   if (target.empty()) throw std::runtime_error("create_class needs a file");
   const fs::path file = fs::absolute(target);
+  refuse_in_example(file);
   if (fs::exists(file)) throw std::runtime_error(file.string() + " already exists");
   if (!fs::is_directory(file.parent_path())) throw std::runtime_error("no folder " + file.parent_path().string());
 
@@ -546,6 +612,7 @@ json op_new_package(const json& in) {
   if (!qualified_name(within)) throw std::runtime_error("not a package name: " + within);
   if (parent.empty()) throw std::runtime_error("new_package needs a parent folder");
   const fs::path dir = fs::absolute(parent) / name;
+  refuse_in_example(dir);
   if (fs::exists(dir)) throw std::runtime_error(dir.string() + " already exists");
   fs::create_directories(dir);
   std::ofstream(dir / "package.mo") << (within.empty() ? "" : "within " + within + ";\n\n") << "package " << name
@@ -565,6 +632,7 @@ json op_duplicate_class(const json& in) {
   const fs::path file = fs::absolute(file_name);
   if (!fs::is_regular_file(file)) throw std::runtime_error("no file " + file.string());
   const fs::path target = file.parent_path() / (new_name + ".mo");
+  refuse_in_example(target);
   if (fs::exists(target)) throw std::runtime_error(target.string() + " already exists");
   std::ifstream source(file);
   const std::string text((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
@@ -586,6 +654,7 @@ json op_rename_class(const json& in) {
   if (file_name.empty()) throw std::runtime_error("rename_class needs a file");
   const fs::path file = fs::absolute(file_name);
   if (!fs::is_regular_file(file) || file.extension() != ".mo") throw std::runtime_error("no .mo file " + file.string());
+  refuse_in_example(file);
   const fs::path target = file.parent_path() / (new_name + ".mo");
   if (fs::exists(target)) throw std::runtime_error(target.string() + " already exists");
   std::ifstream source(file);
@@ -603,6 +672,7 @@ json op_delete_class(const json& in) {
   if (file_name.empty()) throw std::runtime_error("delete_class needs a file");
   const fs::path file = fs::absolute(file_name);
   if (file.extension() != ".mo") throw std::runtime_error("only .mo files can be deleted");
+  refuse_in_example(file);
   if (!fs::exists(file)) throw std::runtime_error("no file " + file.string());
   fs::remove(file);
   if (!name.empty() && fs::exists(file.parent_path() / "package.mo")) order_remove(file.parent_path(), name);
@@ -620,6 +690,7 @@ json op_delete_package(const json& in) {
   const fs::path root = fs::weakly_canonical(fs::absolute(root_name), ec);
   if (ec) throw std::runtime_error("cannot resolve " + dir_name);
   if (dir == root) throw std::runtime_error("the workspace root cannot be deleted");
+  refuse_in_example(dir);
   if (!fs::is_directory(dir) || !fs::is_regular_file(dir / "package.mo"))
     throw std::runtime_error(dir.string() + " is not a Modelica package");
   auto a = dir.begin(), b = root.begin();
@@ -687,6 +758,8 @@ json op_move_class(const json& in) {
   if (file.extension() != ".mo" || !fs::is_regular_file(file)) throw std::runtime_error("no .mo file " + file.string());
   if (!fs::is_directory(target_dir)) throw std::runtime_error("no folder " + target_dir.string());
   const fs::path target = target_dir / file.filename();
+  refuse_in_example(file);
+  refuse_in_example(target);
   if (target == file) return {{"file", file.string()}, {"model", within.empty() ? file.stem().string() : within + "." + file.stem().string()}};
   if (fs::exists(target)) throw std::runtime_error(target.string() + " already exists");
   std::ifstream source(file);
@@ -707,10 +780,12 @@ json op_move_class(const json& in) {
 
 json op_save(Omc& omc, const json& in) {
   const std::string model = user_model(in);
-  const std::string source = text_of(omc.call("getSourceFile(" + model + ")"));
   std::string file = in.value("file", "");
+  if (!file.empty()) refuse_in_example(file);  // before omc: the target alone decides
+  const std::string source = text_of(omc.call("getSourceFile(" + model + ")"));
   if (file.empty()) file = source;
   if (file.empty()) throw std::runtime_error(model + " has no file to save to");
+  refuse_in_example(file);
   if (in.contains("content") && in["content"].is_string()) {
     std::ofstream(file) << in["content"].get<std::string>();
   } else if (fs::absolute(file) != fs::absolute(source)) {
@@ -797,6 +872,7 @@ json op_set_icon(Omc& omc, const json& in) {
   const std::string model = user_model(in);
   if (!in.contains("icon") || !in["icon"].is_object()) throw std::runtime_error("set_icon needs an icon");
   const std::string icon = icon_annotation(in["icon"]);
+  refuse_in_example(text_of(omc.call("getSourceFile(" + model + ")")));  // set_icon is saved next
   if (omc.call("addClassAnnotation(" + model + ", annotate=" + icon + ")") != "true")
     throw std::runtime_error("cannot set the icon: " + omc.errors());
   return json::object();
@@ -808,6 +884,7 @@ json op_generate(Omc& omc, const json& in, const Session& session) {
                     .fmu_solver = in.value("fmu_solver", "cvode")};
   if (o.source.empty()) throw std::runtime_error("generate needs a source .mo");
   if (!o.dry && o.out.empty()) throw std::runtime_error("generate needs an out folder");
+  if (!o.dry) refuse_in_example(o.out);
   const json id = in.value("id", json());
   if (session.push)
     o.progress = [&](std::string_view stage, double fraction) {
@@ -1519,6 +1596,7 @@ json op_hubs() {
   for (const json& h : list) {
     if (!h.is_object() || !h.contains("id") || !h.contains("path")) continue;
     const fs::path root = h.value("path", "");
+    if (example_at(root)) continue;  // an example's hub (Malachite's, opened in place) is no hub of the user's
     const bool missing = h.value("missing", false) || !fs::is_directory(root);
     std::size_t models = 0;
     if (!missing) hub_tree(root, &models);
@@ -1658,6 +1736,7 @@ json op_example_open(const json& in) {
 // folder name> (refused when that is there already) and opens the copy in a new window; its entry, or why not.
 json op_example_copy(const json& in) {
   const std::string id = example_id(in);
+  if (const std::string to = in.value("to", ""); !to.empty()) refuse_in_example(user_path(to));
   return paperboat_json("example copy " + id + " --to " + quoted_folder(in.value("to", "")) + " --open", "example copy");
 }
 
@@ -1669,6 +1748,7 @@ struct Place {
   fs::path root = {};
   std::string name = {};
   std::string hub = {};  // a hub's id
+  std::optional<ExampleAt> example = {};  // an example opened in place: read-only
 };
 std::mutex place_mutex;
 Place place;
@@ -1678,10 +1758,15 @@ Place current_place() {
   return place;
 }
 
+// Where an example's exports go, as nothing is written into it: Articula's own folder, exports/<its folder>.
+fs::path example_exports(const Place& p) { return default_workspace() / "exports" / p.root.filename(); }
+
 json place_json(const Place& p) {
   if (p.kind.empty()) return {{"kind", nullptr}};
   json out{{"kind", p.kind}, {"root", p.root.string()}, {"name", p.name}};
   if (!p.hub.empty()) out["hub"] = p.hub;
+  if (p.example) out["example"] = {{"id", p.example->id}, {"name", p.example->name.empty() ? p.name : p.example->name}, {"exports", example_exports(p).string()},
+                     {"cache", at_or_inside(real_path(p.root), real_path(paperboat_home() / "cache" / "examples"))}};  // GitHub's copy
   return out;
 }
 
@@ -1833,13 +1918,18 @@ json op_settings_write(const json& in) {
 
 // ── Switching: Open folder, Connect to a hub, Close; and a file from outside (op_open).
 
-json work_in(Omc& omc, const Place& next) {
+// An example opened in place (paperboat#75) is read-only: omc gets it read-only (the lease's default; a
+// container enforces it), and it stays out of the recent list (its Copy is the user's).
+json work_in(Omc& omc, const Place& given) {
+  Place next = given;
+  example_folders(true);  // the examples as they are now: one may have been fetched since
+  if (!next.kind.empty()) next.example = example_at(next.root);
   {
     std::lock_guard lock(place_mutex);
     place = next;
   }
-  omc.set_project(next.root);
-  if (!next.kind.empty()) remember(next.kind, next.root, next.hub);
+  omc.set_project(next.root, !next.example);
+  if (!next.kind.empty() && !next.example) remember(next.kind, next.root, next.hub);
   return place_json(next);
 }
 
@@ -1888,6 +1978,7 @@ json op_open(Omc& omc, const json& in, const Session& session) {
     return {{"file", nullptr}, {"model", nullptr}, {"workspace", place_json(now)}};
   }
   if (file.extension() != ".mo") throw std::runtime_error("Articula opens .mo files: " + file.filename().string() + " isn't one");
+  if (in.contains("content") || !fs::exists(file)) refuse_in_example(file);  // a drop or a new model writes it
   fs::create_directories(file.parent_path());
   if (in.contains("content") && in["content"].is_string()) {
     // a dropped file lands here: never over another one of that name
@@ -1908,7 +1999,7 @@ json op_open(Omc& omc, const json& in, const Session& session) {
   const std::string model = load_file(omc, file, [&](const char* stage) {
     if (session.push) session.push(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", stage}, {"fraction", 0}}.dump());
   });
-  remember("file", file, now.hub);
+  if (!now.example && !example_at(file)) remember("file", file, now.hub);
   return {{"file", file.string()}, {"model", model}, {"workspace", place_json(now)}};
 }
 
@@ -2043,6 +2134,7 @@ nlohmann::json transfer_export(Omc& omc, const nlohmann::json& in, const fs::pat
   const fs::path given = rel == "~" || rel.starts_with("~/") ? fs::path(home_dir() + rel.substr(1)) : fs::path(rel);
   const fs::path out = (given.is_absolute() ? given : root / given).lexically_normal();
   if (confined && !inside(out, root)) throw std::runtime_error("an export stays inside the hub: " + rel);
+  refuse_in_example(out);
   static const std::set<std::string> kinds{"station", "linear", "linear-station", "fmu", "flat", "equations", "results"};
   if (!kinds.contains(kind)) throw std::runtime_error("export as " + kind + ": unknown kind");  // before making any folder
   // a file there already: say so and write nothing, unless the caller asked (and so the user agreed) to replace it
@@ -2130,6 +2222,8 @@ json op_transfer(Omc& omc, const json& in, const Session& session) {
   const Place p = current_place();
   if (p.kind.empty()) throw std::runtime_error("open a folder or a hub first: an export goes into it");
   if (in.value("mode", "export") != "export") throw std::runtime_error("transfer exports; an import runs in the app");
+  // an example's exports go to Articula's own folder (exports/<its name>), relative paths too: nothing lands in it
+  if (p.example) return transfer_export(omc, in, example_exports(p), false, session);
   return transfer_export(omc, in, p.root, p.kind == "hub", session);  // a hub keeps its exports; a folder lets them go anywhere
 }
 
@@ -2181,6 +2275,13 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
         out["error"] = "not allowed: " + expr.substr(0, expr.find('(')) + " (Studio may call only the articula/0 allow-list)";
         return out.dump();
       }
+      // an example's models take no edits (paperboat#75): omc would only change them in memory, but the page
+      // offers Copy instead, and a save would be refused anyway
+      static const std::set<std::string> edits = {"addComponent", "deleteComponent", "addConnection", "deleteConnection",
+                                                  "setComponentModifierValue", "setParameterValue", "setComponentProperties",
+                                                  "updateComponent", "updateConnection"};
+      if (const Place now = current_place(); now.example && edits.contains(trim(expr.substr(0, expr.find('(')))))
+        throw std::runtime_error(example_words(*now.example));
       out["result"] = omc.call(expr);
     } else if (op == "open") {
       out["result"] = op_open(omc, in, session);

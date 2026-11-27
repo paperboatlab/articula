@@ -56,16 +56,19 @@ function PartView({ id, data, selected }: NodeProps<PartNode>) {
 }
 
 /** Save a wire's dragged bends (in the model's a-to-b order). */
+/** An example's diagram (paperboat#75): looked at, selected, never changed. */
+const Locked = createContext(false);
 const SetBends = createContext<(wire: Connection, bends: WirePoint[]) => Promise<void>>(() => Promise.resolve());
 
 const sideOf = (p: Position) => (p === Position.Left ? "left" : p === Position.Top ? "top" : p === Position.Bottom ? "bottom" : "right");
 
 function WireView({ id, data, selected, markerEnd, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition }: EdgeProps<WireEdge>) {
   const setBends = useContext(SetBends);
+  const locked = useContext(Locked);
   const from: WirePoint = [sourceX, sourceY];
   const to: WirePoint = [targetX, targetY];
   const routed = data?.points ? squareUp(from, data.points, to) : orthoPoints(from, sideOf(sourcePosition), to, sideOf(targetPosition));
-  const { points, handles } = useWireBends(routed, !!selected && !!data, (bends) => setBends(data!.wire, data!.flipped ? bends.reverse() : bends));
+  const { points, handles } = useWireBends(routed, !!selected && !!data && !locked, (bends) => setBends(data!.wire, data!.flipped ? bends.reverse() : bends));
   const path = roundedPolyline(points, 8);
   return (
     <>
@@ -83,6 +86,7 @@ type Props = { api: StudioApi; actions: Actions; classes: string[]; onOpen(name:
 
 export function Canvas({ api, actions, classes, onOpen }: Props) {
   const { model, selection } = api;
+  const locked = !!api.readOnly;  // rotate, flip, delete and the rest go through the store, which refuses them
   const flow = useReactFlow();
   const root = useRef<HTMLDivElement>(null);
   const [wire, setWire] = useState<Connection | null>(null);
@@ -157,6 +161,7 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
   const onDrop = (e: DragEvent) => {
     const cls = e.dataTransfer.getData(DRAG_TYPE);
     if (!cls) return;
+    if (locked) return void (e.preventDefault(), actions.say(api.readOnly!, true));
     e.preventDefault();
     const p = flow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
     place(cls, { x: snap(p.x), y: snap(p.y), rotation: 0 });
@@ -225,7 +230,7 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
 
   useCanvasHotkeys({
     hasSelection: Boolean(selection.length || wire),
-    onInsert: () => !quick && setQuick(true),
+    onInsert: () => (locked ? actions.say(api.readOnly!, true) : !quick && setQuick(true)),
     onRotateCW: () => void rotateSelected(true),
     onRotateCCW: () => void rotateSelected(false),
     onFlipH: () => void flipSelected("x"),
@@ -247,6 +252,7 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
 
   return (
     <div ref={root} className="canvas" tabIndex={0} onDragOver={(e) => e.dataTransfer.types.includes(DRAG_TYPE) && e.preventDefault()} onDrop={onDrop} data-testid="canvas">
+      <Locked.Provider value={locked}>
       <SetBends.Provider value={actions.bend}>
       <WireDragContext.Provider value={drag}>
         <ReactFlow<PartNode, WireEdge>
@@ -259,7 +265,8 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
           connectionRadius={SNAP.connect}
           deleteKeyCode={null}
           zoomOnDoubleClick={false}
-          nodesConnectable
+          nodesConnectable={!locked}
+          nodesDraggable={!locked}
           proOptions={{ hideAttribution: true }}
           onConnectStart={(_, from) => from.nodeId && setAnchor(pathFor(from.nodeId, from.handleId))}
           onConnectEnd={() => setAnchor(null)}
@@ -308,6 +315,7 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
         </ReactFlow>
       </WireDragContext.Provider>
       </SetBends.Provider>
+      </Locked.Provider>
       {actions.notice.failed && (
         <p className="notice" role="alert">
           {actions.notice.text}

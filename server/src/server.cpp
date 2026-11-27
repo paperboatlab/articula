@@ -1582,6 +1582,17 @@ json op_hub_open_malachite(const json& in) {
   return json::object();
 }
 
+// Manage runtimes…: the Paperboat Launcher on Runtimes › omc, started or focused (paperboat#69).
+json op_manage_runtimes() {
+  const fs::path log = fs::temp_directory_path() / "articula-launcher.log";
+  if (run_paperboat({"launcher", "--page", "runtimes", "--runtime", "omc"}, log) != 0) {
+    std::ifstream f(log);
+    std::string why((std::istreambuf_iterator<char>(f)), {});
+    throw std::runtime_error(why.empty() ? "paperboat launcher failed" : why);
+  }
+  return json::object();
+}
+
 // ── The workspace (plans/2026-11-26_11-05_one_file_workflow.md): a folder, a hub, or none (the Start
 // page), switched at runtime; omc's lease follows it (its project). One per server, shared by its pages.
 
@@ -2137,6 +2148,8 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_open_simplicial(in);
     } else if (op == "hub_open_malachite") {
       out["result"] = op_hub_open_malachite(in);
+    } else if (op == "manage_runtimes") {
+      out["result"] = op_manage_runtimes();
     } else if (op == "create_class") {
       out["result"] = op_create_class(in);
     } else if (op == "new_package") {
@@ -2177,7 +2190,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in, session);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; articula/0 has omc, open, workspace, open_folder, connect, close_workspace, tree, recent, recent_forget, settings, settings_write, config, config_write, about, hubs, hub_files, hub_new, hub_open_malachite, open_simplicial, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
+      out["error"] = "unknown op; articula/0 has omc, open, workspace, open_folder, connect, close_workspace, tree, recent, recent_forget, settings, settings_write, config, config_write, about, hubs, hub_files, hub_new, hub_open_malachite, open_simplicial, manage_runtimes, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate, cancel";
       return out.dump();
     }
     out["ok"] = true;
@@ -2190,7 +2203,8 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
   // read or write files never start omc for it (the Start page needs none), nor does `open` with nothing to open.
   static const std::set<std::string> disk_only = {"workspace", "open_folder", "connect", "close_workspace", "tree", "recent",
                                                   "recent_forget", "settings", "settings_write", "config", "config_write", "about",
-                                                  "git", "hubs", "hub_files", "hub_new", "hub_open_malachite", "open_simplicial", "read_data"};
+                                                  "git", "hubs", "hub_files", "hub_new", "hub_open_malachite", "open_simplicial", "read_data",
+                                                  "manage_runtimes"};
   if (!errors_read && !disk_only.contains(op) && !omc.version().empty()) {  // a never-started omc has said nothing
     try {
       if (omc.last_messages().empty()) omc.messages();

@@ -537,7 +537,8 @@ struct Store {
     const fs::path bin = home.parent_path() / "paperboat";
     std::ofstream(bin) << "#!/bin/sh\n[ \"$1 $2\" = \"hub list\" ] && echo '[{\"id\": \"h1\", \"name\": \"tank-lab\", \"path\": \"" << hub.string()
                        << "\", \"place\": \"local\", \"shown\": \"~/hubs/tank-lab\"}]'\n"
-                       << "[ \"$1 $2 $3\" = \"app open simplicial\" ] && echo '{\"app\": \"simplicial\", \"url\": \"http://127.0.0.1:30471/\"}'\n";
+                       << "[ \"$1 $2 $3\" = \"app open simplicial\" ] && echo '{\"app\": \"simplicial\", \"url\": \"http://127.0.0.1:30471/\"}'\n"
+                       << "[ \"$1\" = launcher ] && echo \"$*\" > " << (home.parent_path() / "launcher-args").string() << "\n";
     fs::permissions(bin, fs::perms::owner_all);
     setenv("PAPERBOAT_HOME", home.c_str(), 1);
     setenv("PAPERBOAT_BIN", bin.c_str(), 1);
@@ -1059,6 +1060,17 @@ TEST_CASE("open_simplicial: Simplicial's page on a started station, or why not",
   CHECK(op(omc, {{"op", "open_simplicial"}})["ok"] == false);  // no port
   setenv("PAPERBOAT_BIN", "/nonexistent/paperboat", 1);
   CHECK_THAT(op(omc, {{"op", "open_simplicial"}, {"port", 52431}})["error"].get<std::string>(), Catch::Matchers::ContainsSubstring("paperboat app install simplicial"));
+}
+
+TEST_CASE("manage_runtimes: the Launcher on Runtimes › omc, or why not", "[articula]") {
+  const Store store;
+  mo::Omc omc;
+  REQUIRE(op(omc, {{"op", "manage_runtimes"}})["ok"] == true);
+  std::string args;
+  std::getline(std::ifstream(store.home.parent_path() / "launcher-args"), args);
+  CHECK(args == "launcher --page runtimes --runtime omc");
+  setenv("PAPERBOAT_BIN", "/nonexistent/paperboat", 1);
+  CHECK(op(omc, {{"op", "manage_runtimes"}})["ok"] == false);
 }
 
 TEST_CASE("settings.json holds the theme every app starts in", "[articula]") {

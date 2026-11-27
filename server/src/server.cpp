@@ -1734,21 +1734,29 @@ json op_recent_forget(const json& in) {
   return op_recent();
 }
 
+bool is_scale(double s) { return s == 0.75 || s == 1 || s == 1.25; }
+
 json op_settings() {
   const json s = read_store("settings.json");
   const std::string theme = s.contains("theme") && s["theme"].is_string() ? s["theme"].get<std::string>() : "";
-  return {{"version", 1}, {"theme", theme == "light" || theme == "dark" ? theme : "system"}};
+  const double scale = s.contains("scale") && s["scale"].is_number() ? s["scale"].get<double>() : 1;
+  return {{"version", 1}, {"theme", theme == "light" || theme == "dark" ? theme : "system"}, {"scale", is_scale(scale) ? scale : 1}};
 }
 
-// The theme every app starts in; the other keys another app wrote stay.
+// The theme and the interface scale every app starts in, either or both; the other keys another app wrote stay.
 json op_settings_write(const json& in) {
-  const std::string theme = in.value("theme", "");
-  if (theme != "light" && theme != "dark" && theme != "system") throw std::runtime_error("theme is light, dark or system");
+  if (in.contains("theme")) {
+    const std::string theme = in["theme"].is_string() ? in["theme"].get<std::string>() : "";
+    if (theme != "light" && theme != "dark" && theme != "system") throw std::runtime_error("theme is light, dark or system");
+  }
+  if (in.contains("scale") && !(in["scale"].is_number() && is_scale(in["scale"].get<double>())))
+    throw std::runtime_error("scale is 0.75, 1 or 1.25");
   {
     std::lock_guard lock(store_mutex);
     json s = read_store("settings.json");
     s["version"] = 1;
-    s["theme"] = theme;
+    for (const char* k : {"theme", "scale"})
+      if (in.contains(k)) s[k] = in[k];
     write_store("settings.json", s);
   }
   return op_settings();

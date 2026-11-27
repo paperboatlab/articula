@@ -5,7 +5,7 @@
 // a component click, the interface sheet on Alt V, the export dock under the stage.
 
 import { ReactFlowProvider } from "@xyflow/react";
-import { About, AppMark, Icon, Key, MenuBar, Notifications, Panel, PanelsKey, RuntimesKey, Search, Segmented, SettingRow, Settings, SettingsSection, ShortcutList, Split as Gutter, ThemeSetting, Toasts, WindowKeys, readStored, useToasts, writeStored, type PaneRect, type SearchItem, type Theme } from "@paperboatlab/ui";
+import { About, AppMark, Icon, Key, MenuBar, Notifications, Panel, PanelsKey, RuntimesKey, Search, Segmented, ScaleSetting, SettingRow, Settings, SettingsSection, ShortcutList, Split as Gutter, ThemeSetting, Toasts, WindowKeys, isScale, readStored, useScale, useToasts, writeStored, type PaneRect, type Scale, type SearchItem, type Theme } from "@paperboatlab/ui";
 import { HelpWindow } from "@paperboatlab/ui";
 import { afterClose, EditorSettingsPane, EditorTabs, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
 import { helpCommand, SEARCH_CHORD, useShortcuts, type Command } from "@paperboatlab/ui";
@@ -149,8 +149,19 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     writeStored("articula.theme", t);
     void omc.op("settings_write", { theme: t }).catch(() => undefined);
   }, [omc]);
+  const [scale, setScaleNow] = useState<Scale>(() => readStored("articula.scale", isScale) ?? 1);
+  const setScale = useCallback((s: Scale) => {
+    setScaleNow(s);
+    writeStored("articula.scale", s);
+    void omc.op("settings_write", { scale: s }).catch(() => undefined);
+  }, [omc]);
+  useScale(scale);
   useEffect(() => {
-    const read = () => void omc.op("settings").then((v) => { const t = parseSettings(v).theme; setThemeNow(t); writeStored("articula.theme", t); }, () => undefined);
+    const read = () => void omc.op("settings").then((v) => {
+      const { theme: t, scale: s } = parseSettings(v);
+      setThemeNow(t); writeStored("articula.theme", t);
+      setScaleNow(s); writeStored("articula.scale", s);
+    }, () => undefined);
     read();
     window.addEventListener("focus", read);
     return () => window.removeEventListener("focus", read);
@@ -1069,7 +1080,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           repo="paperboatlab/articula" credits={CREDITS} onClose={() => setAboutOpen(false)} />}
         {settingsPage && (
           <Settings app="Articula" page={settingsPage} onClose={() => setSettingsPage(null)} pages={[
-            { id: "general", label: "General", icon: "a-settings", body: <ThemeSetting theme={theme} onTheme={setTheme} /> },
+            { id: "general", label: "General", icon: "a-settings", body: <><ThemeSetting theme={theme} onTheme={setTheme} /><ScaleSetting scale={scale} onScale={setScale} /></> },
             { id: "articula", label: "Articula", icon: "mark-articula", body: <>
               <SettingsSection title="OpenModelica">
                 <SettingRow label="omc" hint={`${status.state === "ready" ? "Running" : status.state === "failed" ? "Stopped: the next call starts a new session" : "Starting"}${status.mode ? `, ${status.mode === "native" ? "on this computer" : `in ${status.mode}`}` : ""}; one session per workspace`}>

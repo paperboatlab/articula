@@ -4,10 +4,10 @@ Settings
 File › Settings… (:kbd:`Ctrl ,`) opens one window, the same in every Paperboat app, with its pages on
 the left. A change applies at once; there is no Save.
 
-- **General**: the theme, Light, Dark or System (follows your system). It is the one setting every
-  Paperboat app shares: it lives in ``settings.json`` in Paperboat's folder (``$PAPERBOAT_HOME``, else
-  ``~/.local/share/paperboat``), every app starts in it, and a change in one is written there. View ›
-  Theme picks it too.
+- **General**: the theme, Light, Dark or System (follows your system), and the interface scale, Compact (75 %), Default or Large (125 %), which sizes text, icons and keys alike. They
+  are the settings every Paperboat app shares: they live in ``settings.json`` in Paperboat's folder (``$PAPERBOAT_HOME``, else
+  ``~/.local/share/paperboat``), every app starts in them, and a change in one is written there. View ›
+  Theme picks the theme too.
 - **Articula**: OpenModelica (omc's version and how it runs; **Libraries…**, the workspace's Modelica
   libraries), Simulation (**Solver settings…**, kept per model) and Export (**Export station…**).
 - **Editor**: the text editor's look (theme, font, size, line height) and typing (tab size, wrap lines,

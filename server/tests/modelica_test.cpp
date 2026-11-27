@@ -1033,7 +1033,7 @@ TEST_CASE("open_simplicial: Simplicial's page on a started station, or why not",
 TEST_CASE("settings.json holds the theme every app starts in", "[articula]") {
   const Store store;
   mo::Omc omc;
-  CHECK(op(omc, {{"op", "settings"}})["result"] == json{{"version", 1}, {"theme", "system"}});
+  CHECK(op(omc, {{"op", "settings"}})["result"] == json{{"version", 1}, {"theme", "system"}, {"scale", 1}});
   fs::create_directories(store.home);
   std::ofstream(store.home / "settings.json") << R"({"version": 1, "theme": "light", "font": "big"})";
   CHECK(op(omc, {{"op", "settings"}})["result"]["theme"] == "light");
@@ -1042,6 +1042,10 @@ TEST_CASE("settings.json holds the theme every app starts in", "[articula]") {
   const json written = json::parse(read_text(store.home / "settings.json"));
   CHECK(written["theme"] == "dark");
   CHECK(written["font"] == "big");  // another app's key stays
+  // the interface scale beside it: 1 when unset, one of three
+  CHECK(op(omc, {{"op", "settings_write"}, {"scale", 0.75}})["result"]["scale"] == 0.75);
+  CHECK(op(omc, {{"op", "settings_write"}, {"scale", 2}})["ok"] == false);
+  CHECK(json::parse(read_text(store.home / "settings.json"))["theme"] == "dark");  // a scale alone leaves the theme
   for (const auto& e : fs::directory_iterator(store.home)) CHECK(e.path().extension() != ".tmp");
 }
 

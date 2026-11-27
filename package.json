@@ -33,7 +33,7 @@
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.15",
     "@lezer/highlight": "^1.2.5",
-    "@paperboatlab/ui": "github:paperboatlab/paperboat-ui#391b069b9e7b9902e449db8d7a1fc112691de1c8",
+    "@paperboatlab/ui": "github:paperboatlab/paperboat-ui#502474a47ce4455a22f32a1e4d3c3c64d11207fc",
     "@types/node": "^22.19.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -41,6 +41,7 @@
     "esbuild": "^0.25.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "smol-toml": "^1.9.1",
     "typescript": "^7.0.2",
     "uplot": "^1.6.32"
   }

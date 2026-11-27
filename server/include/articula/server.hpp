@@ -51,6 +51,11 @@
 //                                                  pushes {op: "progress", id, stage, fraction} first, stage
 //                                                  check|flatten|generate|build; `files` (relative path →
 //                                                  text) only when `dry`, which writes nothing
+//   transfer  {mode: "export", kind, model, out, …}
+//                                              → {path, bytes, notes}   Export as ▸: transfer_export() into the
+//                                                  workspace (`out` relative to its root, never outside it)
+//   read_data {file, limit?}                    → {text, bytes, truncated}   a .csv/.txt/.toml/.json/.jl in the
+//                                                  workspace, for an import to read (its first `limit` bytes, 1 MB)
 //   simulate  {model, stop, vars?, method?, tolerance?, intervals?, start?}
 //                                               → {t, series, names, shapes?}  a local check run with omc,
 //                                                  method dassl, tolerance 1e-6, 500 intervals from 0 unless given; series for `vars` (all when omitted),
@@ -78,6 +83,13 @@ struct Session {
 
 // One articula/0 message handled; returns the reply (empty for a message that wants none).
 std::string handle(Omc& omc, const std::string& message, const Session& session = {});
+
+// Export as ▸ one kind of the loaded `model` into `root` (the workspace; the CLI: the current folder), the op
+// `transfer`'s work: {kind, model, out, …} → {path, bytes, notes}. kind station {path?, fmu_solver?} |
+// linear-station {set?, at?} | linear {lang, set?, at?} | fmu {fmi, fmuType, fmu_solver} | flat | equations
+// {stage, mathml?, solving?} | results {text}. `set` {name: number} overrides parameters (the operating point),
+// `at` the time to linearise at. Pushes {op: "progress", stage} as it goes.
+nlohmann::json transfer_export(Omc& omc, const nlohmann::json& in, const std::filesystem::path& root, const Session& session = {});
 
 // omc's <model>_visual.xml (-d=visxml) as [{ident, type, T[9], r[3], r_shape[3], lengthDir[3],
 // widthDir[3], length, width, height, extra, color[3]}]. Each value is a number, or the result

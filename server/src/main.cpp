@@ -1,6 +1,8 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <map>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -28,6 +30,10 @@ void print_help(std::string_view prog) {
             << "  " << prog << " generate <Model.mo> [options]        Make a Paperboat station from Modelica\n"
             << "  " << prog << " check <Model.mo> [--model <Name>]    omc's checkModel on Modelica model\n"
             << "  " << prog << " icon <Model.mo|Name> [--class <Name>] Import icon & connectors as JSON\n"
+            << "  " << prog << " export <Model.mo> --model <Name> --as <kind> [--out <file>] [options]\n"
+            << "                   kind: station | linear-station | linear | fmu | flat | equations\n"
+            << "                   --set a=1,b=2 (the operating point)  --at <s>  --lang julia|python|matlab|modelica\n"
+            << "                   --fmi 2.0|3.0  --type cs|me  --solver cvode|euler  --stage flat|optimiser|backEnd  --path auto|ode|fmu\n"
             << "\nomc runs as Paperboat's omc runtime (paperboat runtime list); Modelica libraries are its\n"
             << "packages: paperboat package add omc Modelica --project <folder>\n\n"
             << "  " << prog << " --help | --version\n"
@@ -129,6 +135,64 @@ int cmd_check_or_generate(std::string_view action, const std::vector<std::string
   }
 }
 
+// `articula export`: the app's Export as ▸, from a terminal (the dialog shows the same line).
+int cmd_export(const std::vector<std::string_view>& args) {
+  if (args.empty() || args[0] == "--help" || args[0] == "-h") {
+    std::cerr << "usage: articula export <Model.mo> --model <Name> --as <kind> [--out <file>] (articula help)\n";
+    return 2;
+  }
+  const fs::path source = fs::absolute(std::string(args[0]));
+  nlohmann::json in{{"source", source.string()}, {"set", nlohmann::json::object()}};
+  static const std::map<std::string_view, const char*> flag{{"--model", "model"}, {"--as", "kind"}, {"--out", "out"}, {"--lang", "lang"},
+      {"--fmi", "fmi"}, {"--type", "fmuType"}, {"--solver", "fmu_solver"}, {"--stage", "stage"}, {"--path", "path"}};
+  for (std::size_t i = 1; i < args.size(); ++i) {
+    if (i + 1 >= args.size()) {
+      std::cerr << "error: " << args[i] << " needs a value\n";
+      return 2;
+    }
+    const std::string value(args[i + 1]);
+    if (args[i] == "--set") {
+      std::stringstream all(value);
+      for (std::string kv; std::getline(all, kv, ',');) {
+        const auto eq = kv.find('=');
+        if (eq == std::string::npos) { std::cerr << "error: --set takes name=number\n"; return 2; }
+        in["set"][kv.substr(0, eq)] = kv.substr(eq + 1);
+      }
+    } else if (args[i] == "--at") {
+      in["at"] = std::stod(value);
+    } else if (flag.contains(args[i])) {
+      in[flag.at(args[i])] = value;
+    } else {
+      std::cerr << "error: unknown option " << args[i] << '\n';
+      return 2;
+    }
+    ++i;
+  }
+  const std::string model = in.value("model", ""), kind = in.value("kind", "");
+  if (model.empty() || kind.empty()) {
+    std::cerr << "error: export needs --model and --as\n";
+    return 2;
+  }
+  if (!in.contains("out")) {
+    static const std::map<std::string, std::string> ext{{"station", ".pst"}, {"linear-station", ".pst"}, {"fmu", ".fmu"}, {"flat", ".flat.mo"}, {"equations", ".xml"}};
+    const std::map<std::string, std::string> lang{{"julia", ".jl"}, {"python", ".py"}, {"matlab", ".m"}, {"modelica", ".mo"}};
+    const std::string stem = model.substr(model.rfind('.') == std::string::npos ? 0 : model.rfind('.') + 1);
+    in["out"] = stem + (kind == "linear" ? lang.at(in.value("lang", "julia")) : ext.contains(kind) ? ext.at(kind) : "");
+  }
+  try {
+    mo::Omc omc(around(source));
+    omc.call("loadModel(Modelica)");
+    if (omc.call("loadFile(" + mo::quote(omc.omc_path(source.string())) + ")") != "true") throw std::runtime_error(omc.errors());
+    const auto r = mo::transfer_export(omc, in, fs::current_path(), {});
+    std::cout << "wrote " << r.value("path", std::string()) << " (" << r.value("bytes", 0) << " bytes)\n";
+    for (const auto& n : r["notes"]) if (!n.get<std::string>().empty()) std::cout << "  " << n.get<std::string>() << '\n';
+    return 0;
+  } catch (const std::exception& e) {
+    std::cerr << "error: " << e.what() << '\n';
+    return 1;
+  }
+}
+
 fs::path find_app_dir(const fs::path& explicit_app, const fs::path& exe_dir) {
   if (!explicit_app.empty()) return explicit_app;
   std::error_code ec;
@@ -190,6 +254,7 @@ int main(int argc, char** argv) {
       std::vector<std::string_view> sub_args(args.begin() + 1, args.end());
       return cmd_check_or_generate(args[0], sub_args);
     }
+    if (args[0] == "export") return cmd_export(std::vector<std::string_view>(args.begin() + 1, args.end()));
     if (args[0] == "icon") {
       std::vector<std::string_view> sub_args(args.begin() + 1, args.end());
       return cmd_icon(sub_args);

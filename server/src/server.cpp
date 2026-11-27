@@ -1966,13 +1966,17 @@ std::string linear_class(const Linear& l, const std::string& name, const std::st
 }  // namespace
 
 // Export as ▸ one kind, into `root` (the workspace; the CLI: the current folder). See server.hpp.
-nlohmann::json transfer_export(Omc& omc, const nlohmann::json& in, const fs::path& root, const Session& session) {
+nlohmann::json transfer_export(Omc& omc, const nlohmann::json& in, const fs::path& root, bool confined, const Session& session) {
   const std::string kind = in.value("kind", "");
   const std::string model = user_model(in);
   const std::string rel = in.value("out", "");
-  if (rel.empty()) throw std::runtime_error("an export needs out: where it goes in the workspace");
-  const fs::path out = (root / rel).lexically_normal();
-  if (!inside(out, root)) throw std::runtime_error("an export stays inside the workspace: " + rel);
+  if (rel.empty()) throw std::runtime_error("an export needs out: where it goes");
+  // relative to the workspace, or (outside a hub) anywhere: an absolute path or ~/…
+  const fs::path given = rel == "~" || rel.starts_with("~/") ? fs::path(home_dir() + rel.substr(1)) : fs::path(rel);
+  const fs::path out = (given.is_absolute() ? given : root / given).lexically_normal();
+  if (confined && !inside(out, root)) throw std::runtime_error("an export stays inside the hub: " + rel);
+  static const std::set<std::string> kinds{"station", "linear", "linear-station", "fmu", "flat", "equations", "results"};
+  if (!kinds.contains(kind)) throw std::runtime_error("export as " + kind + ": unknown kind");  // before making any folder
   fs::create_directories(out.parent_path());
   const auto stage = [&](const char* s) {
     if (session.push) session.push(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", s}, {"fraction", 0}}.dump());
@@ -2046,7 +2050,7 @@ nlohmann::json transfer_export(Omc& omc, const nlohmann::json& in, const fs::pat
   } else {
     throw std::runtime_error("export as " + kind + ": unknown kind");
   }
-  return {{"path", out.lexically_relative(root).generic_string()}, {"bytes", fs::file_size(out)}, {"notes", notes}};
+  return {{"path", inside(out, root) ? out.lexically_relative(root).generic_string() : out.string()}, {"bytes", fs::file_size(out)}, {"notes", notes}};
 }
 
 namespace {
@@ -2055,7 +2059,7 @@ json op_transfer(Omc& omc, const json& in, const Session& session) {
   const Place p = current_place();
   if (p.kind.empty()) throw std::runtime_error("open a folder or a hub first: an export goes into it");
   if (in.value("mode", "export") != "export") throw std::runtime_error("transfer exports; an import runs in the app");
-  return transfer_export(omc, in, p.root, session);
+  return transfer_export(omc, in, p.root, p.kind == "hub", session);  // a hub keeps its exports; a folder lets them go anywhere
 }
 
 // A data file in the workspace, for an import to read (a CSV's columns, a TOML's values): its first `limit` bytes.

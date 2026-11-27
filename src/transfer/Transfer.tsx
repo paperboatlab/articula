@@ -112,11 +112,15 @@ export function relPath(from: string, to: string): string {
   return [...a.slice(i).map(() => ".."), ...b.slice(i)].join("/");
 }
 
-export function ArticulaTransfer({ mode, kind, omc, api, model, root, run, stationWhy, onKind, onDone, onFail, onClose }: {
+export function ArticulaTransfer({ mode, kind, omc, api, model, root, hub, pickOut, run, stationWhy, onKind, onDone, onFail, onClose }: {
   mode: TransferMode; kind?: string;
   omc: OmcClient; api: StudioApi | null; model?: StudioModel;
-  /** The workspace's root: exports go in it, imports read from it. */
+  /** The workspace's root: exports go in it (outside a hub, anywhere), imports read from it. */
   root: string;
+  /** In a hub: its exports stay in it. */
+  hub: boolean;
+  /** Change…: the hub's picker or the system's save dialog; a path relative to the root, or absolute. */
+  pickOut?: (name: string, types: string[]) => Promise<string | null>;
   run: Run | null; stationWhy?: string;
   onKind: (mode: TransferMode, kind: string) => void;
   onDone: (title: string, detail: string, mode: TransferMode) => void;
@@ -221,10 +225,14 @@ export function ArticulaTransfer({ mode, kind, omc, api, model, root, run, stati
     return Object.entries(table).filter(([k, v]) => k in now && typeof v === "number").map(([k, v]) => ({ name: k, was: now[k], value: String(v), changes: Number(now[k]) !== v }));
   };
 
+  const place = root.split("/").pop();
   const where = (k: string) => (
     <SettingsSection title="Where">
-      <SettingRow label="Save to" hint={`In ${root.split("/").pop()}, the workspace; a file there already is replaced`}>
+      <SettingRow label="Save to" hint={hub ? `In the hub ${place}: an export stays in it; a file there already is replaced, its earlier version in the hub's history`
+        : `In ${place}, or anywhere on this computer (an absolute path, ~/…); a file there already is replaced`}>
         <input className="well transfer-path" aria-label="Save to" value={out(k)} onChange={(e) => up({ out: { ...o.out, [k]: e.target.value } })} />
+        {pickOut && <Key size="sm" onClick={() => void pickOut(out(k).split("/").pop()!, exportKinds({ model, run }).find((x) => x.id === k)!.types as string[])
+          .then((p) => { if (p) up({ out: { ...o.out, [k]: p } }); })}>Change…</Key>}
       </SettingRow>
     </SettingsSection>
   );

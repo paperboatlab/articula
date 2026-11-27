@@ -145,6 +145,14 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [lastRun, setLastRun] = useState<TransferRun | null>(null);
   const lastKind = useRef(readStored("articula.transfer", (v): v is Record<string, string> => typeof v === "object" && v !== null) ?? {});
   const openTransfer = (mode: TransferMode, kind?: string) => setTransfer({ mode, kind: kind ?? lastKind.current[mode] });
+  // Change… in the export dialog: our picker over a hub (which keeps its exports), else the system's dialog
+  const [exportPick, setExportPick] = useState<{ name: string; types: string[]; done: (path: string | null) => void } | null>(null);
+  const pickExport = (name: string, types: string[]): Promise<string | null> => {
+    if (place?.kind === "hub") return new Promise((done) => setExportPick({ name, types, done }));
+    const sh = shell();
+    if (!sh || !place) return Promise.resolve(null);
+    return sh.pickSave(name, types, "Export as").then((p) => (p && p.startsWith(`${place.root}/`) ? p.slice(place.root.length + 1) : p));
+  };
   // The editor settings, from the user's articula.toml; the theme is every app's, in $PAPERBOAT_HOME/settings.json
   // (read again when the window comes back: another app may have changed it), cached here against a flash.
   const settings = useSqueroConfig(config, { editor: "articula.editor", theme: "paperboat.theme" });
@@ -1044,11 +1052,16 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         )}
         {transfer && place && (
           <ArticulaTransfer mode={transfer.mode} kind={transfer.kind} omc={omc} api={api} model={model} root={place.root} run={lastRun}
+            hub={place.kind === "hub"} pickOut={place.kind === "hub" ? (hub ? pickExport : undefined) : shell() ? pickExport : undefined}
             stationWhy={exportWhy || undefined}
             onKind={(m, k) => { lastKind.current = { ...lastKind.current, [m]: k }; writeStored("articula.transfer", lastKind.current); }}
             onDone={(title, detail, mode) => { say(`${title}: ${detail}`); show({ title, detail, state: "done" }); if (mode === "export") refreshWorkspace(); }}
             onFail={(e, mode) => fail(e, mode === "export" ? "Export failed" : "Import failed")}
             onClose={() => setTransfer(null)} />
+        )}
+        {exportPick && place && hub && (
+          <SaveFile what="the export" types={exportPick.types} hub={hub} list={() => omc.op<FileEntry[]>("hub_files", { root: place.root })} name={exportPick.name}
+            onClose={() => (exportPick.done(null), setExportPick(null))} onSave={(path) => (exportPick.done(path), setExportPick(null))} />
         )}
         {promptModal && (
           <PromptModal

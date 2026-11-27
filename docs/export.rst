@@ -3,15 +3,17 @@ Export and import
 
 **Model ▸ Export…** (:kbd:`Ctrl E`) opens the export and import dialog on the kind used last; **Model ▸
 Export as** and **Model ▸ Import** open it on one kind. The kinds are down the left, grouped; the right
-holds the chosen kind's options, **Where** it goes (a path in the workspace, which an export never
-leaves), and **In a terminal**: the same export as an ``articula export`` command, with Copy. A kind that
+holds the chosen kind's options, **Where** it goes, and **In a terminal**: the same export as an ``articula export`` command, with Copy. A kind that
 can't be chosen now stays in the list, greyed, and says why.
 
 Export
 ------
 
-Every export writes into the workspace (the folder or hub open in Articula); a file already there is
-replaced (a hub keeps its history).
+**Where** takes a path relative to the workspace (the folder or hub open in Articula); the defaults below
+are such paths. In a **hub** an export stays inside it (**Change…** opens the hub's picker), so the hub
+keeps it and its history. In a **folder** it may go anywhere on this computer: an absolute path or
+``~/…``, or **Change…**, the system's save dialog in a Paperboat window. A file already there is replaced
+(in a hub, its earlier version stays in the hub's history).
 
 .. list-table::
    :header-rows: 1

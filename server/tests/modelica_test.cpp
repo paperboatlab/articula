@@ -548,13 +548,17 @@ struct Store {
     fs::remove_all(home.parent_path());
     fs::create_directories(hub);
     const fs::path bin = home.parent_path() / "paperboat";
-    std::ofstream(bin) << "#!/bin/sh\n[ \"$1 $2\" = \"hub list\" ] && echo '[{\"id\": \"h1\", \"name\": \"tank-lab\", \"path\": \"" << hub.string()
+    std::ofstream(bin) << "#!/bin/sh\n[ \"$1\" = example ] && printf '%s\\n' \"$@\" > " << (home.parent_path() / "example-args").string() << "\n"
+                       << "[ \"$1 $2\" = \"hub list\" ] && echo '[{\"id\": \"h1\", \"name\": \"tank-lab\", \"path\": \"" << hub.string()
                        << "\", \"place\": \"local\", \"shown\": \"~/hubs/tank-lab\"}]'\n"
                        << "[ \"$1 $2 $3\" = \"app open simplicial\" ] && echo '{\"app\": \"simplicial\", \"url\": \"http://127.0.0.1:30471/\"}'\n"
                        << "[ \"$*\" = \"example list --app articula --json\" ] && echo '[{\"id\": \"modelica/01-decay\", \"app\": \"articula\", "
                        << "\"kind\": \"modelica\", \"name\": \"01 Decay\", \"description\": \"exponential decay\", \"path\": \"/ex/modelica/01-decay\"}]'\n"
                        << "[ \"$*\" = \"example open modelica/01-decay --json\" ] && echo '{\"id\": \"modelica/01-decay\", \"path\": \"/home/modelica/01-decay\", \"session\": \"s1\"}'\n"
                        << "[ \"$*\" = \"example open modelica/99-none --json\" ] && echo '{\"error\": \"no example modelica/99-none\"}' && exit 2\n"
+                       << "[ \"$1 $2 $4 $6\" = \"example open --to --json\" ] && printf '{\"id\": \"%s\", \"path\": \"/ex/modelica/01-decay\"}\\n' \"$3\"\n"
+                       << "[ \"$1 $2 $4 $6 $7\" = \"example copy --to --open --json\" ] && { [ -e \"$5/01-decay\" ] && echo \"{\\\"error\\\": \\\"$5/01-decay is there already; copy it to another folder\\\"}\" && exit 2; "
+                       << "mkdir \"$5/01-decay\" && printf '{\"id\": \"%s\", \"path\": \"%s/01-decay\", \"cache\": false}\\n' \"$3\" \"$5\"; }\n"
                        << "[ \"$1\" = launcher ] && echo \"$*\" > " << (home.parent_path() / "launcher-args").string() << "\n";
     fs::permissions(bin, fs::perms::owner_all);
     setenv("PAPERBOAT_HOME", home.c_str(), 1);
@@ -1106,6 +1110,46 @@ TEST_CASE("examples: paperboat example list and open, [] without paperboat", "[a
   setenv("PAPERBOAT_BIN", "/nonexistent/paperboat", 1);
   CHECK(op(omc, {{"op", "examples"}})["result"] == json::array());
   CHECK(op(omc, {{"op", "example_open"}, {"id", "modelica/01-decay"}})["ok"] == false);
+  CHECK(op(omc, {{"op", "example_copy"}, {"id", "modelica/01-decay"}, {"to", "/work"}})["ok"] == false);
+}
+
+TEST_CASE("examples: open --to the current folder and the banner's copy, the folder one quoted argument (paperboat#75)", "[articula]") {
+  const Store store;
+  mo::Omc omc;
+  const fs::path args_file = store.home.parent_path() / "example-args";
+  const auto args = [&] {
+    std::vector<std::string> out;
+    std::ifstream in(args_file);
+    for (std::string line; std::getline(in, line);) out.push_back(line);
+    fs::remove(args_file);
+    return out;
+  };
+  // a folder the shell would split, unquote or expand: a space, a ', $HOME, a backtick and $(…)
+  const fs::path to = store.home.parent_path() / "it's my $HOME `id` $(echo x) work";
+  fs::create_directories(to);
+  const json opened = op(omc, {{"op", "example_open"}, {"id", "modelica/01-decay"}, {"to", to.string()}});
+  REQUIRE(opened["ok"] == true);
+  CHECK(args() == std::vector<std::string>{"example", "open", "modelica/01-decay", "--to", to.string(), "--json"});
+
+  const json copied = op(omc, {{"op", "example_copy"}, {"id", "modelica/01-decay"}, {"to", to.string()}});
+  REQUIRE(copied["ok"] == true);
+  CHECK(copied["result"]["path"] == (to / "01-decay").string());
+  CHECK(args() == std::vector<std::string>{"example", "copy", "modelica/01-decay", "--to", to.string(), "--open", "--json"});
+  CHECK(fs::is_directory(to / "01-decay"));
+  // copied once: the CLI refuses the second, and its words reach the page
+  const json again = op(omc, {{"op", "example_copy"}, {"id", "modelica/01-decay"}, {"to", to.string()}});
+  CHECK(again["ok"] == false);
+  CHECK(again["error"] == (to / "01-decay").string() + " is there already; copy it to another folder");
+
+  // never an option, never relative, never empty, and the id stays plain words: the CLI isn't run
+  args();
+  for (const std::string bad : {"", "work", "-rf", "--open", "./x"})
+    CHECK(op(omc, {{"op", "example_copy"}, {"id", "modelica/01-decay"}, {"to", bad}})["ok"] == false);
+  CHECK(op(omc, {{"op", "example_copy"}, {"id", "modelica/01-decay"}})["ok"] == false);
+  CHECK(op(omc, {{"op", "example_copy"}, {"id", "--to"}, {"to", to.string()}})["ok"] == false);
+  CHECK(op(omc, {{"op", "example_copy"}, {"id", "x;id"}, {"to", to.string()}})["ok"] == false);
+  CHECK(op(omc, {{"op", "example_open"}, {"id", "modelica/01-decay"}, {"to", "-rf"}})["ok"] == false);
+  CHECK_FALSE(fs::exists(args_file));
 }
 
 TEST_CASE("settings.json holds the theme every app starts in", "[articula]") {

@@ -42,8 +42,10 @@ flowchart LR
   `?station=ws://localhost:<port>`, from `paperboat app open simplicial --start --no-open --json`), the hubs: `hubs` from `paperboat hub list --json`, `hub_files`, `hub_new`,
   `hub_open_malachite`), `manage_runtimes` (Model › Manage runtimes…: `paperboat launcher --page runtimes --runtime omc`,
   the Launcher on Runtimes › omc, paperboat#69), the examples (`examples` from `paperboat example list --app
-  articula --json`, [] without paperboat; `example_open`: `paperboat example open <id> --json`, a copy in a new
-  window; paperboat#72), and the one file workflow: the workspace (`workspace`, `open_folder`, `connect`,
+  articula --json`, [] without paperboat; `example_open`: `paperboat example open <id> [--to <folder>] --json`, the
+  example in place in a new window, `--to` the folder it was opened from; `example_copy`: the banner's Copy,
+  `paperboat example copy <id> --to <folder> --open --json`; the folder goes through the shell quoted, ids as
+  plain words; paperboat#72, paperboat#75), and the one file workflow: the workspace (`workspace`, `open_folder`, `connect`,
   `close_workspace`, `tree`; `Omc::set_project` moves the lease with it, and an `open` from outside switches
   to the file's hub or folder first) and the shared store (`recent`, `recent_forget`, `settings`,
   `settings_write`: `$PAPERBOAT_HOME/recent.json` and `settings.json`, each written whole to a temp file and

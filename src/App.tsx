@@ -8,12 +8,12 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { About, AppMark, Icon, Key, MenuBar, Notifications, Panel, PanelsKey, RuntimesKey, Search, Segmented, ScaleSetting, SettingRow, Settings, SettingsSection, ShortcutList, Split as Gutter, ThemeSetting, Toasts, WindowKeys, isScale, readStored, useScale, useToasts, writeStored, type PaneRect, type Scale, type SearchItem, type Theme } from "@paperboatlab/ui";
 import { HelpWindow } from "@paperboatlab/ui";
 import { afterClose, EditorSettingsPane, EditorTabs, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
-import { exampleCommands, helpCommand, SEARCH_CHORD, transferMenu, useShortcuts, type Command, type Example, type TransferMode } from "@paperboatlab/ui";
+import { ExampleBanner, exampleCommands, exampleFromUrl, helpCommand, SEARCH_CHORD, transferMenu, useShortcuts, type Command, type Example, type TransferMode } from "@paperboatlab/ui";
 import { ArticulaTransfer, exportKinds, importKinds, type Run as TransferRun } from "./transfer/Transfer.tsx";
 import { omHelp } from "./shell/help.ts";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { ConnectHub, OpenFile, SaveFile, type Hub } from "@paperboatlab/ui/hub";
-import { AskOpen, baseName, fileMenu, parseRecent, parseSettings, recentFor, recentMenu, shell, Start, TypedPath, Unsaved, useOpening, when, WorkspaceWell, type Opening as OpeningState, type RecentEntry, type Workspace as Place } from "@paperboatlab/ui/workspace";
+import { AskOpen, baseName, fileMenu, parseRecent, parseSettings, recentFor, recentMenu, shell, Start, tilde, TypedPath, Unsaved, useOpening, when, WorkspaceWell, type Opening as OpeningState, type RecentEntry, type Workspace as Place } from "@paperboatlab/ui/workspace";
 import type { FileEntry } from "@paperboatlab/ui/files";
 import { useAppConfig as useSqueroConfig, type ConfigStore } from "@paperboatlab/ui/editor";
 import { Canvas } from "./canvas/Canvas.tsx";
@@ -53,6 +53,10 @@ function serverUrl(): string {
   if (given) return given;
   return !location.host ? "ws://localhost:30472" : `ws://${location.host}`;
 }
+
+/** The example this window opened in place, from `paperboat example open`'s URL (paperboat#75): read once, as
+ *  the page loads. Its banner tops the stage. */
+const opened = exampleFromUrl(location.search);
 
 type Side = "l" | "r" | "b";
 const PANELS: { side: Side; name: string; keys: string }[] = [
@@ -259,7 +263,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const readRecent = useCallback(() => omc.op<{ home?: string }>("recent").then((r) => { setRecent(parseRecent(r).recent); setHome(r.home); }, () => undefined), [omc]);
   const hub = place?.kind === "hub" ? hubs?.find((h) => h.id === place.hub) : undefined;
   // the dialogs of the workflow: Open asks, Connect, our picker over the hub, a typed path in a browser
-  const [ask, setAsk] = useState<"open" | "connect" | "pickOpen" | "pickSave" | "folder" | "file" | null>(null);
+  const [ask, setAsk] = useState<"open" | "connect" | "pickOpen" | "pickSave" | "folder" | "file" | "copyTo" | null>(null);
   const [unsaved, setUnsaved] = useState<{ closing?: string; then: (autosave: boolean) => Promise<void> | void } | null>(null);
   const currentEntry = workspace?.entries.find((entry) => entry.path === model?.file);
   const canExport = currentEntry ? currentEntry.classKind === "model" || currentEntry.classKind === "block" : false;
@@ -431,6 +435,20 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     if (!sh) return setAsk("folder");
     void sh.pickFolder("Open folder").then((p) => p && openFolder(p));
   };
+  /** The banner's Copy: into the folder the example was opened from, else one picked like Open folder's;
+   *  the CLI opens the copy in a new window. */
+  const copyExample = (to?: string) => {
+    if (!opened) return;
+    if (!to) {
+      const sh = shell();
+      if (!sh) return setAsk("copyTo");
+      return void sh.pickFolder("Copy the example to").then((p) => p && copyExample(p));
+    }
+    void omc.op<{ path: string }>("example_copy", { id: opened.id, to }).then(
+      (r) => show({ title: `Copied ${opened.name}`, detail: `to ${tilde(r.path, home)}, opening in a new window`, state: "done" }),
+      (e) => fail(e, "Couldn't copy the example"));
+  };
+  const banner = opened && <ExampleBanner name={opened.name} folder={opened.to && tilde(opened.to, home)} cache={opened.cache} onCopy={() => copyExample(opened.to)} />;
   /** A local .mo: the system's dialog in a Paperboat window, a typed path in a browser. */
   const pickLocal = () => {
     const sh = shell();
@@ -862,7 +880,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     { id: "help.shortcuts", label: "Keyboard shortcuts", menu: "help", group: "help", shortcut: "Ctrl /", chord: { key: "/", ctrl: true },
       enabled: () => !document.activeElement?.closest(".cm-editor"), run: () => setSettingsPage("shortcuts") },
     { id: "about", label: "About Articula", menu: "help", group: "about", run: () => setAboutOpen(true) },
-    ...exampleCommands(examples, (id) => void omc.op("example_open", { id }).catch((e) => fail(e, "Couldn't open the example"))),
+    ...exampleCommands(examples, (id) => void omc.op("example_open", place ? { id, to: place.root } : { id }).catch((e) => fail(e, "Couldn't open the example"))),
   ];
   useShortcuts(commands);
   const helpProvider = useMemo(() => omHelp(omc), [omc]);
@@ -939,6 +957,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             {!api || !model ? (
               <div className="mid bay empty-bay">
                 <main className="panel stage" aria-label="No model open">
+                  {banner}
                   <p className="stage-empty"><span>No model open: pick one in Files, or New model (Ctrl N).</span></p>
                 </main>
               </div>
@@ -947,6 +966,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               onSize={(w) => (setSimWidth(w), hidden.r && toggle("r", false))} onHidden={() => toggle("r", true)}>
             <div className="mid bay">
               <main className="panel stage" aria-label={model.name}>
+                {banner}
                 <EditorTabs label="Open models" current={model.file} menu={docMenu}
                   tabs={shownDocs.map((d) => ({ id: d.file, label: d.name, icon: <span className="ck ck-model">M</span>, dirty: d.file === model.file && (actions.dirty || textDirty), pinned: pinned.has(d.file), closable: shownDocs.length > 1 }))}
                   onShow={(f) => void openDocument(f)} onClose={(f) => void closeDocuments([f])}>
@@ -1044,6 +1064,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           <SaveFile what="the model" types={["mo"]} hub={hub} list={() => omc.op<FileEntry[]>("hub_files", { root: place.root })} name={modelFile ? baseName(modelFile) : `${model?.name}.mo`}
             onClose={() => setAsk(null)} onSave={(path) => (setAsk(null), void saveAsTo(`${place.root}/${path}`))} />
         )}
+        {ask === "copyTo" && <TypedPath title="Copy the example to" onClose={() => setAsk(null)} onOpen={(p) => (setAsk(null), copyExample(p))} />}
         {(ask === "folder" || ask === "file") && (
           <TypedPath title={ask === "folder" ? "Open folder" : "Open a local file"} what={ask} initial={place && ask === "folder" ? "" : place ? `${place.root}/` : ""}
             onClose={() => setAsk(null)} onOpen={(p) => (setAsk(null), ask === "folder" ? openFolder(p) : void openDocument(p))} />

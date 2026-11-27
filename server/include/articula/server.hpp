@@ -53,7 +53,8 @@
 //                                                  text) only when `dry`, which writes nothing
 //   transfer  {mode: "export", kind, model, out, …}
 //                                              → {path, bytes, notes}   Export as ▸: transfer_export(); `out`
-//                                                  relative to the workspace's root, or anywhere outside a hub
+//                                                  relative to the workspace's root, or anywhere outside a hub;
+//                                                  → {exists} when a file is there, unless `replace`
 //   read_data {file, limit?}                    → {text, bytes, truncated}   a .csv/.txt/.toml/.json/.jl in the
 //                                                  workspace, for an import to read (its first `limit` bytes, 1 MB)
 //   simulate  {model, stop, vars?, method?, tolerance?, intervals?, start?}
@@ -89,7 +90,8 @@ std::string handle(Omc& omc, const std::string& message, const Session& session 
 // `transfer`'s work: {kind, model, out, …} → {path, bytes, notes}. kind station {path?, fmu_solver?} |
 // linear-station {set?, at?} | linear {lang, set?, at?} | fmu {fmi, fmuType, fmu_solver} | flat | equations
 // {stage, mathml?, solving?} | results {text}. `set` {name: number} overrides parameters (the operating point),
-// `at` the time to linearise at. Pushes {op: "progress", stage} as it goes.
+// `at` the time to linearise at. A file at `out` already: {exists: path}, nothing written, unless `replace`.
+// Pushes {op: "progress", stage} as it goes.
 nlohmann::json transfer_export(Omc& omc, const nlohmann::json& in, const std::filesystem::path& root, bool confined = true,
                                const Session& session = {});
 

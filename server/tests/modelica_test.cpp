@@ -110,6 +110,14 @@ TEST_CASE("an export stays in a hub, sets only name = number", "[transfer]") {
                       ContainsSubstring("not a model"));
   REQUIRE_THROWS_WITH(mo::transfer_export(omc, {{"kind", "linear"}, {"model", "M"}, {"out", "m.x"}, {"lang", "fortran"}}, root),
                       ContainsSubstring("julia, python, matlab or modelica"));
+  // a file there already: say so, write nothing (omc isn't asked), unless replace
+  std::filesystem::create_directories(root / "out");
+  std::ofstream(root / "out" / "m.mo") << "mine";
+  CHECK(mo::transfer_export(omc, {{"kind", "flat"}, {"model", "M"}, {"out", "out/m.mo"}}, root) == nlohmann::json{{"exists", "out/m.mo"}});
+  std::string kept;
+  std::ifstream(root / "out" / "m.mo") >> kept;
+  CHECK(kept == "mine");
+  REQUIRE_THROWS(mo::transfer_export(omc, {{"kind", "flat"}, {"model", "M"}, {"out", "out/m.mo"}, {"replace", true}}, root));  // went on to omc
   // the transfer op needs a workspace to export into
   mo::handle(omc, R"({"id": 1, "op": "close_workspace"})");  // an earlier test may have left one open
   CHECK(mo::handle(omc, R"({"id": 1, "op": "transfer", "kind": "flat", "model": "M", "out": "m.mo"})").find("open a folder or a hub first") != std::string::npos);

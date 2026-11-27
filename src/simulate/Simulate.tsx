@@ -72,7 +72,15 @@ function Stimuli({ inputs, value, onChange }: { inputs: string[]; value: Record<
 }
 
 /** Where a variable lives: its first path segment groups it ("R1.v" under R1; "time" alone). */
-const groupOf = (n: string) => (n.startsWith("der(") ? n.slice(4).split(".")[0] : n.includes(".") ? n.slice(0, n.indexOf(".")) : "");
+const innerOf = (n: string) => (n.startsWith("der(") && n.endsWith(")") ? n.slice(4, -1) : n);
+export const groupOf = (n: string) => { const i = innerOf(n); return i.includes(".") ? i.slice(0, i.indexOf(".")) : ""; };
+/** A variable's name under its group: "R1.v" is "v", "der(load.w)" is "der(w)". */
+export function leafOf(n: string): string {
+  const i = innerOf(n);
+  const g = groupOf(n);
+  const rest = g ? i.slice(g.length + 1) : i;
+  return i === n ? rest : `der(${rest})`;
+}
 const fmt = (v: number | null | undefined) => (v === null || v === undefined || !Number.isFinite(v) ? "–" : Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 1e-3) ? v.toExponential(3) : String(+v.toPrecision(5)));
 
 /** The variables browser (OMEdit's, with a filter): every result variable grouped by its component,
@@ -91,7 +99,7 @@ function Variables({ run, picks, onPicks }: { run: Run | null; picks: string[]; 
     return (
       <label key={n} className={`var${nested ? " nested" : ""}`} title={n} style={i >= 0 ? ({ "--trace": `var(--series-${(i % 6) + 1})` } as CSSProperties) : undefined}>
         <input type="checkbox" checked={i >= 0} onChange={() => onPicks(i >= 0 ? picks.filter((x) => x !== n) : [...picks, n])} />
-        <span className="vn">{nested ? n.slice(groupOf(n).length + 1) || n : n}</span>
+        <span className="vn">{nested ? leafOf(n) : n}</span>
         <span className="vv">{fmt(last(n))}</span>
       </label>
     );
@@ -132,7 +140,9 @@ export function Simulate({
   onRunningChange?: (running: boolean) => void;
   onRun?: (run: Run) => void;
 }) {
-  const [stop, setStop] = useState("1");
+  // the model's experiment(StopTime), until the field is edited; again when the model or its annotation changes
+  const [stop, setStop] = useState(String(model.stopTime ?? 1));
+  useEffect(() => setStop(String(model.stopTime ?? 1)), [model.name, model.stopTime]);
   const [stimuli, setStimuli] = useState<Record<string, Stimulus>>({});
   const [solver, setSolverState] = useState<SolverChoice>(() => loadSolver(model.name));
   useEffect(() => setSolverState(loadSolver(model.name)), [model.name]);

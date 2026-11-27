@@ -27,6 +27,7 @@ export class OmcClient {
   private readonly onStatus: (status: OmcStatus) => void;
   private logListener: ((message: OmcLog) => void) | undefined;
   private logBuffer: OmcLog[] = [];
+  private logHistory: OmcLog[] = [];
 
   constructor(url: string, onStatus: (status: OmcStatus) => void = () => {}) {
     this.onStatus = onStatus;
@@ -86,6 +87,11 @@ export class OmcClient {
     this.logBuffer = [];
   }
 
+  /** The last 200 messages, for the splash's Show log (the Console has them all). */
+  history(): OmcLog[] {
+    return this.logHistory;
+  }
+
   close(): void {
     this.closing = true;
     this.ws.close();
@@ -110,6 +116,7 @@ export class OmcClient {
         ...(msg.line !== undefined ? {line: msg.line} : {}),
         ...(msg.column !== undefined ? {column: msg.column} : {}),
       };
+      this.logHistory = [...this.logHistory.slice(-199), log];
       if (this.logListener) this.logListener(log);
       else if (this.logBuffer.length < 500) this.logBuffer.push(log); // before the panel subscribes
       return;

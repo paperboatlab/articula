@@ -506,7 +506,7 @@ const std::vector<std::string>& allowed_calls() {
       "loadModel", "loadFile", "getClassNames", "getComponents", "getComponentAnnotations",
       "getNthComponentCondition", "getInheritedClasses", "getClassRestriction", "isConnector",
       "getComponentModifierValue", "getDerivedClassModifierValue", "getIconAnnotation", "getDiagramAnnotation",
-      "getConnectionCount", "getNthConnection", "checkModel", "instantiateModel", "addComponent", "deleteComponent", "addConnection",
+      "getConnectionCount", "getNthConnection", "getSimulationOptions", "checkModel", "instantiateModel", "addComponent", "deleteComponent", "addConnection",
       "deleteConnection", "setComponentModifierValue", "list", "dumpXMLDAE", "buildModelFMU", "getVersion",
       "getErrorString",  // read-only, how a client words a failed call
       "isPartial", "getSourceFile", "getClassComment", "getDocumentationAnnotation",  // read-only: the library tree, open and Help

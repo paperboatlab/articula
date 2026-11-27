@@ -235,6 +235,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   // ── The workspace (the one file workflow): a folder, a hub, or none (the Start page); the server
   // switches it, and keeps the recent list every app shares. undefined: not read yet.
   const [place, setPlace] = useState<Place | null | undefined>(undefined);
+  const [booted, setBooted] = useState(false);  // the splash finished its unfold and handed over
   const placeRoot = useRef<string | null>(null);
   const [recent, setRecent] = useState<RecentEntry[]>([]);
   const [home, setHome] = useState<string>();
@@ -891,8 +892,9 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             <WindowKeys />
           </span>
         </header>
-        {!actions.ready || place === undefined ? (
-          <Opening status={status} stage={stage} error={error} onRetry={() => location.reload()} />
+        {!booted ? (
+          <Opening status={status} stage={stage} error={error} ready={actions.ready && place !== undefined} onReady={() => setBooted(true)}
+            onRetry={() => location.reload()} log={() => omc.history()} />
         ) : !place ? (
           <main className="ws">
             <div className="mid bay start-bay">

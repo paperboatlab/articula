@@ -59,6 +59,7 @@ export type StudioModel = {
   icon?: IconDef; // the model's own look (Look tab), the generated linked block's view.icon
   connectors: Connectors;
   undrawn?: Undrawn; // counted from what omc says; absent when everything is drawn as written
+  stopTime?: number; // the model's experiment(StopTime) (omc's getSimulationOptions; 1 without one)
 };
 
 export type ExportProgress = { stage: "check" | "flatten" | "generate" | "build"; fraction: number };

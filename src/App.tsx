@@ -754,6 +754,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   };
 
   // every render: the File menu's handlers close over the workspace and the open model
+  // where an example's Copy goes: the open folder; in an example's own window, the folder it came from
+  const copyTo = opened ? opened.to : place?.root;
   const commands: Command[] = [
     // File: the same items in the same order in every app (the kit's fileMenu); the model's own below
     ...fileMenu({
@@ -880,7 +882,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     { id: "help.shortcuts", label: "Keyboard shortcuts", menu: "help", group: "help", shortcut: "Ctrl /", chord: { key: "/", ctrl: true },
       enabled: () => !document.activeElement?.closest(".cm-editor"), run: () => setSettingsPage("shortcuts") },
     { id: "about", label: "About Articula", menu: "help", group: "about", run: () => setAboutOpen(true) },
-    ...exampleCommands(examples, (id) => void omc.op("example_open", place ? { id, to: place.root } : { id }).catch((e) => fail(e, "Couldn't open the example"))),
+    ...exampleCommands(examples, (id) => void omc.op("example_open", copyTo ? { id, to: copyTo } : { id }).catch((e) => fail(e, "Couldn't open the example"))),
   ];
   useShortcuts(commands);
   const helpProvider = useMemo(() => omHelp(omc), [omc]);

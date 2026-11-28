@@ -100,6 +100,8 @@ body { background: var(--surface-ground); color: var(--text); font: var(--size-s
 .icon-swatch { width: 14px; height: 14px; padding: 0; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-raised); cursor: pointer; }
 .icon-swatch.on { box-shadow: 0 0 0 2px var(--surface-panel), 0 0 0 3px var(--line-ink); }
 .icon-swatch.none { background: repeating-linear-gradient(45deg, transparent 0 3px, var(--line-strong) 3px 4px); }
+.icon-colours.read-only .icon-swatch { cursor: default; }  /* an example: the chosen colour shows, the others step back (the kit's .read-only) */
+.icon-colours.read-only .icon-swatch:not(.on) { opacity: 0.4; }
 .icon-add-connector { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .icon-add-connector input { flex: 1 1 92px; min-width: 0; height: 24px; padding: 0 5px; border: 0; background: var(--surface-well); box-shadow: var(--well-shadow); border-radius: var(--radius-sm); font: 400 var(--size-3xs) var(--font-mono); color: var(--text); }
 .icon-side-select { flex: none; width: 68px; height: 22px; padding: 0 4px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-well); color: var(--text); font: 400 var(--size-3xs) var(--font-mono); }

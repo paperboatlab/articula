@@ -983,8 +983,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             </Rail>
             {!api || !model ? (
               <div className="mid bay empty-bay">
+                {banner}
                 <main className="panel stage" aria-label="No model open">
-                  {banner}
                   <p className="stage-empty"><span>No model open: pick one in Files, or New model (Ctrl N).</span></p>
                 </main>
               </div>
@@ -992,8 +992,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             <Gutter label="Simulate width" size={hidden.r ? 38 : simWidth} defaultSize={420} min={320} otherMin={420}
               onSize={(w) => (setSimWidth(w), hidden.r && toggle("r", false))} onHidden={() => toggle("r", true)}>
             <div className="mid bay">
+              {banner}
               <main className="panel stage" aria-label={model.name}>
-                {banner}
                 <EditorTabs label="Open models" current={model.file} menu={docMenu}
                   tabs={shownDocs.map((d) => ({ id: d.file, label: d.name, icon: <span className="ck ck-model">M</span>, dirty: d.file === model.file && (actions.dirty || textDirty), pinned: pinned.has(d.file), closable: shownDocs.length > 1 }))}
                   onShow={(f) => void openDocument(f)} onClose={(f) => void closeDocuments([f])}>

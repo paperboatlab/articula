@@ -24,6 +24,7 @@ function initialTabFromUrl(): SheetTab {
 
 export function InterfaceSheet({ open, onOpen, onClose, canExport }: InterfaceSheetProps) {
   const api = useStudio();
+  const ro = api.readOnly; // an example: nothing to remove
   const [tab, setTab] = useState<SheetTab>(initialTabFromUrl);
   const inputs = api.model.entries.filter((e) => e.kind === "input");
   const outputs = api.model.entries.filter((e) => e.kind === "output");
@@ -69,7 +70,7 @@ export function InterfaceSheet({ open, onOpen, onClose, canExport }: InterfaceSh
                             {entry.name}
                           </span>
                           {entry.unit && <span className="studio-prop-unit">{entry.unit}</span>}
-                          <RemoveKey label={`Remove ${entry.name}`} onClick={() => void api.removeEntry(entry.name)} />
+                          <RemoveKey label={`Remove ${entry.name}`} disabled={!!ro} title={ro} onClick={() => void api.removeEntry(entry.name)} />
                         </div>
                       ))
                     )}
@@ -86,7 +87,7 @@ export function InterfaceSheet({ open, onOpen, onClose, canExport }: InterfaceSh
                             {entry.name}
                           </span>
                           {entry.unit && <span className="studio-prop-unit">{entry.unit}</span>}
-                          <RemoveKey label={`Remove ${entry.name}`} onClick={() => void api.removeEntry(entry.name)} />
+                          <RemoveKey label={`Remove ${entry.name}`} disabled={!!ro} title={ro} onClick={() => void api.removeEntry(entry.name)} />
                         </div>
                       ))
                     )}

@@ -90,6 +90,7 @@ function Value({
   onError: (words: string) => void;
 }) {
   const api = useStudio();
+  const ro = api.readOnly; // an example: the value shows, it doesn't change
   const [draft, setDraft] = useState<string | null>(null);
   if (!param || mode === "passthrough") return <span className="var-value">{value ?? "—"}</span>;
   const shown = draft ?? String(param.default);
@@ -103,6 +104,8 @@ function Value({
       <NumberField
         className="var-value-input"
         aria-label={`Value of ${param.id}`}
+        readOnly={!!ro}
+        title={ro}
         value={Number(param.default)}
         onChange={(v) => setDraft(String(v))}
         onBlur={() => draft !== null && commit(draft)}
@@ -114,6 +117,8 @@ function Value({
       <input
         type="checkbox"
         aria-label={`Value of ${param.id}`}
+        disabled={!!ro}
+        title={ro}
         checked={param.default === true}
         onChange={(e) => void api.setParam(param.id, String(e.target.checked)).catch((err: Error) => onError(err.message))}
       />
@@ -121,8 +126,10 @@ function Value({
   }
   return (
     <input
-      className="var-value-input"
+      className={`var-value-input${ro ? " read-only" : ""}`}
       aria-label={`Value of ${param.id}`}
+      readOnly={!!ro}
+      title={ro}
       value={shown}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => draft !== null && commit(draft)}
@@ -133,14 +140,17 @@ function Value({
 
 function VarRow({ v, param, mode, onError }: { v: ModelVar; param?: Param; mode: Mode; onError: (words: string) => void }) {
   const api = useStudio();
+  const ro = api.readOnly;
   const kind = kindOf(v);
   return (
     <div className={`var-row${v.visibility === "protected" ? " protected" : ""}`} role="treeitem">
       <VarIcon v={v} />
       {mode === "edit" && param ? (
         <input
-          className="var-name-input"
+          className={`var-name-input${ro ? " read-only" : ""}`}
           aria-label={`Name of ${param.id}`}
+          readOnly={!!ro}
+          title={ro}
           defaultValue={param.id}
           spellCheck={false}
           onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
@@ -167,7 +177,8 @@ function VarRow({ v, param, mode, onError }: { v: ModelVar; param?: Param; mode:
             type="button"
             className={`var-pass${param.private ? "" : " on"}`}
             aria-pressed={!param.private}
-            title={param.private ? "Not passed to Paperboat. Click to expose it as a Station property." : "Passed to Paperboat as a Station property at run time. Click to keep it inside the model."}
+            disabled={!!ro}
+            title={ro ?? (param.private ? "Not passed to Paperboat. Click to expose it as a Station property." : "Passed to Paperboat as a Station property at run time. Click to keep it inside the model.")}
             onClick={() => void api.setPrivate(param.id, !param.private).catch((e: Error) => onError(e.message))}
           >
             {param.private ? "off" : "passthrough"}
@@ -178,7 +189,7 @@ function VarRow({ v, param, mode, onError }: { v: ModelVar; param?: Param; mode:
           </span>
         )
       ) : param ? (
-        <RemoveKey label={`Remove ${param.id}`} onClick={() => void api.removeVariable(param.id).catch((e: Error) => onError(e.message))} />
+        <RemoveKey label={`Remove ${param.id}`} disabled={!!ro} title={ro} onClick={() => void api.removeVariable(param.id).catch((e: Error) => onError(e.message))} />
       ) : null}
     </div>
   );
@@ -278,6 +289,8 @@ export function VariablesTree({ model, mode }: { model: StudioModel; mode: Mode 
           <button
             type="button"
             className="key sm"
+            disabled={!!api.readOnly}
+            title={api.readOnly}
             onClick={() => {
               const taken = new Set([...model.params.map((p) => p.id), ...model.components.map((c) => c.name)]);
               let n = 1;

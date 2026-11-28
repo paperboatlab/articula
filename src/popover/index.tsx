@@ -20,6 +20,7 @@ export type ComponentPopoverProps = { component: string; onClose: () => void };
 
 export function ComponentPopover({ component, onClose }: ComponentPopoverProps) {
   const api = useStudio();
+  const ro = api.readOnly; // an example: the values show, nothing changes them
   const rootRef = useRef<HTMLDivElement>(null);
   const [bindingParam, setBindingParam] = useState<string | null>(null);
   const [bindName, setBindName] = useState("");
@@ -149,7 +150,8 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
                         <button
                           type="button"
                           className="studio-key"
-                          title={`Unbind ${paramId} (keep ${numVal})`}
+                          disabled={!!ro}
+                          title={ro ?? `Unbind ${paramId} (keep ${numVal})`}
                           onClick={() => void unbindParam(api, comp.name, paramId, parsed.bound!).then(() => setTick((t) => t + 1))}
                         >
                           ×
@@ -160,6 +162,8 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
                         <NumberField
                           className="studio-well-input"
                           aria-label={`${comp.name}.${paramId}`}
+                          readOnly={!!ro}
+                          title={ro}
                           value={numVal}
                           onChange={(v) => {
                             void commitParamValue(api, comp.name, paramId, v).then(() => setTick((t) => t + 1));
@@ -169,7 +173,8 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
                         <button
                           type="button"
                           className="studio-key"
-                          title={`Bind ${paramId} to a variable (or drop one here from the sheet)`}
+                          disabled={!!ro}
+                          title={ro ?? `Bind ${paramId} to a variable (or drop one here from the sheet)`}
                           onClick={() => startBind(paramId)}
                         >
                           =

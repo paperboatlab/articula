@@ -98,16 +98,19 @@ const FILL_SWATCHES = Object.entries(FILL).map(([token, color]) => ({ token, col
 function ColorRow({
   label,
   value,
+  readOnly,
   swatches,
   onChange,
 }: {
   label: "stroke" | "fill";
   value: string;
+  /** An example: why the colour can't change; the chosen swatch shows, the others step back. */
+  readOnly?: string;
   swatches: { token: string; color: string; label: string }[];
   onChange: (token: string) => void;
 }) {
   return (
-    <div className="icon-colours" role="radiogroup" aria-label={label}>
+    <div className={`icon-colours${readOnly ? " read-only" : ""}`} role="radiogroup" aria-label={label} aria-readonly={!!readOnly || undefined}>
       <span className="lbl">{label}</span>
       <span className="icon-swatches">
         {swatches.map((swatch) => (
@@ -117,10 +120,10 @@ function ColorRow({
             role="radio"
             aria-checked={swatch.token === value}
             aria-label={`${label}: ${swatch.label}`}
-            title={`${label}: ${swatch.label}`}
+            title={readOnly ?? `${label}: ${swatch.label}`}
             className={`icon-swatch${swatch.token === "none" ? " none" : ""}${swatch.token === value ? " on" : ""}`}
             style={swatch.token === "none" ? undefined : { background: swatch.color }}
-            onClick={() => onChange(swatch.token)}
+            onClick={() => { if (!readOnly) onChange(swatch.token); }}
           />
         ))}
       </span>
@@ -130,6 +133,7 @@ function ColorRow({
 
 export function IconView() {
   const api = useStudio();
+  const ro = api.readOnly; // an example: the icon shows and shapes can be picked, nothing changes
   const [draft, setDraft] = useState<IconDef>(() => syncPortsWithEntries(api.model.icon, api.model.entries));
   const [selected, setSelected] = useState(-1);
   const [selectedPort, setSelectedPort] = useState<string | null>(null);
@@ -157,6 +161,7 @@ export function IconView() {
   }, [api.model.icon, api.model.entries]);
 
   const change = (fn: (icon: IconDef) => IconDef) => {
+    if (ro) return;
     setDraft(fn);
     setDirty(true);
   };
@@ -415,8 +420,8 @@ export function IconView() {
       <header className="icon-view-bar">
         <div className="icon-tools" role="toolbar" aria-label="Drawing tools">
           {TOOLS.map((t) => (
-            <Key key={t.tool} size="sm" kind="quiet" className="icon-tool" title={`${t.label} — ${t.hint}`} aria-label={t.label} aria-pressed={tool === t.tool}
-              disabled={t.tool === "pin" && ports.length === 0} onClick={() => setTool(t.tool)}>
+            <Key key={t.tool} size="sm" kind="quiet" className="icon-tool" title={ro && t.tool !== "select" ? ro : `${t.label} — ${t.hint}`} aria-label={t.label} aria-pressed={tool === t.tool}
+              disabled={(t.tool === "pin" && ports.length === 0) || (!!ro && t.tool !== "select")} onClick={() => setTool(t.tool)}>
               <ToolIcon tool={t.tool} />
             </Key>
           ))}
@@ -425,15 +430,15 @@ export function IconView() {
         <Key size="sm" aria-pressed={grid} onClick={() => setGrid((g) => !g)}>Grid</Key>
         <Key size="sm" aria-pressed={snap} onClick={() => setSnap((s) => !s)}>Snap</Key>
         <span className="sep" />
-        <Key size="sm" disabled={!selectedPrim} onClick={duplicate} title="Duplicate (Ctrl D)">Duplicate</Key>
-        <Key size="sm" disabled={!selectedPrim} onClick={() => bring("front")}>Front</Key>
-        <Key size="sm" disabled={!selectedPrim} onClick={() => bring("back")}>Back</Key>
-        <Key size="sm" disabled={!selectedPrim} onClick={() => selected >= 0 && (change((icon) => removePrimAt(icon, selected)), setSelected(Math.max(0, selected - 1)))}>Delete</Key>
+        <Key size="sm" disabled={!selectedPrim || !!ro} onClick={duplicate} title={ro ?? "Duplicate (Ctrl D)"}>Duplicate</Key>
+        <Key size="sm" disabled={!selectedPrim || !!ro} title={ro} onClick={() => bring("front")}>Front</Key>
+        <Key size="sm" disabled={!selectedPrim || !!ro} title={ro} onClick={() => bring("back")}>Back</Key>
+        <Key size="sm" disabled={!selectedPrim || !!ro} title={ro} onClick={() => selected >= 0 && (change((icon) => removePrimAt(icon, selected)), setSelected(Math.max(0, selected - 1)))}>Delete</Key>
         <span className="spacer" />
         <span className="icon-count">
           {draft.g.length} shapes · {plateSizeKey(draft)}
         </span>
-        <Key size="sm" kind="primary" disabled={!dirty} onClick={() => void save()}>{saved ? "Saved" : "Save"}</Key>
+        <Key size="sm" kind="primary" disabled={!dirty || !!ro} title={ro} onClick={() => void save()}>{saved ? "Saved" : "Save"}</Key>
       </header>
       <div className="icon-view-body">
         <div className={`icon-canvas${tool === "select" ? " select" : ""}`}>
@@ -503,23 +508,24 @@ export function IconView() {
             <h3>shape</h3>
             {selectedPrim ? (
               <div className="studio-look-choices">
-                <ColorRow label="stroke" value={selectedPrim.stroke ?? "ink"} swatches={STROKE_SWATCHES} onChange={(stroke) => patchSelected({ stroke: stroke as Stroke })} />
-                <Segmented<Weight> label="Weight" value={selectedPrim.weight ?? "normal"} onChange={(weight) => patchSelected({ weight })} options={WEIGHT_OPTIONS} />
-                <ColorRow label="fill" value={selectedPrim.fill ?? "none"} swatches={FILL_SWATCHES} onChange={(fill) => patchSelected({ fill: fill as Fill })} />
-                <Segmented<Dash> label="Dash" value={selectedPrim.dash ?? "solid"} onChange={(dash) => patchSelected({ dash })} options={DASH_OPTIONS} />
+                <ColorRow label="stroke" readOnly={ro} value={selectedPrim.stroke ?? "ink"} swatches={STROKE_SWATCHES} onChange={(stroke) => patchSelected({ stroke: stroke as Stroke })} />
+                <Segmented<Weight> label="Weight" readOnly={!!ro} value={selectedPrim.weight ?? "normal"} onChange={(weight) => patchSelected({ weight })} options={WEIGHT_OPTIONS} />
+                <ColorRow label="fill" readOnly={ro} value={selectedPrim.fill ?? "none"} swatches={FILL_SWATCHES} onChange={(fill) => patchSelected({ fill: fill as Fill })} />
+                <Segmented<Dash> label="Dash" readOnly={!!ro} value={selectedPrim.dash ?? "solid"} onChange={(dash) => patchSelected({ dash })} options={DASH_OPTIONS} />
                 {selectedPrim.t === "rect" && (
-                  <Segmented<Corner> label="Corner" value={selectedPrim.corner ?? "0"} onChange={(corner) => patchSelected({ corner })} options={CORNER_OPTIONS} />
+                  <Segmented<Corner> label="Corner" readOnly={!!ro} value={selectedPrim.corner ?? "0"} onChange={(corner) => patchSelected({ corner })} options={CORNER_OPTIONS} />
                 )}
                 {selectedPrim.t === "text" && (
                   <>
-                    <Segmented<"sans" | "mono"> label="Font" value={selectedPrim.font ?? "sans"} onChange={(font) => patchSelected({ font })} options={FONT_OPTIONS} />
+                    <Segmented<"sans" | "mono"> label="Font" readOnly={!!ro} value={selectedPrim.font ?? "sans"} onChange={(font) => patchSelected({ font })} options={FONT_OPTIONS} />
                     <Segmented<"12" | "12.5" | "13" | "15" | "30">
                       label="Size"
+                      readOnly={!!ro}
                       value={String(selectedPrim.size ?? 12) as "12" | "12.5" | "13" | "15" | "30"}
                       onChange={(sz) => patchSelected({ size: Number(sz) as 12 | 12.5 | 13 | 15 | 30 })}
                       options={SIZE_OPTIONS}
                     />
-                    <input className="studio-prop-input" value={selectedPrim.s} aria-label="Text" onChange={(e) => patchSelected({ s: e.target.value })} />
+                    <input className={`studio-prop-input${ro ? " read-only" : ""}`} readOnly={!!ro} title={ro} value={selectedPrim.s} aria-label="Text" onChange={(e) => patchSelected({ s: e.target.value })} />
                   </>
                 )}
               </div>
@@ -532,12 +538,12 @@ export function IconView() {
             <section className="icon-section">
               <h3>geometry</h3>
               <div className="icon-geometry">
-                <label>x <NumberField value={selectedPrim.x} onChange={(x) => patchSelected({ x })} /></label>
-                <label>y <NumberField value={selectedPrim.y} onChange={(y) => patchSelected({ y })} /></label>
+                <label>x <NumberField readOnly={!!ro} value={selectedPrim.x} onChange={(x) => patchSelected({ x })} /></label>
+                <label>y <NumberField readOnly={!!ro} value={selectedPrim.y} onChange={(y) => patchSelected({ y })} /></label>
                 {"w" in selectedPrim && (
                   <>
-                    <label>w <NumberField value={selectedPrim.w} onChange={(w) => patchSelected({ w })} /></label>
-                    <label>h <NumberField value={selectedPrim.h} onChange={(h) => patchSelected({ h })} /></label>
+                    <label>w <NumberField readOnly={!!ro} value={selectedPrim.w} onChange={(w) => patchSelected({ w })} /></label>
+                    <label>h <NumberField readOnly={!!ro} value={selectedPrim.h} onChange={(h) => patchSelected({ h })} /></label>
                   </>
                 )}
               </div>
@@ -546,7 +552,7 @@ export function IconView() {
 
           <section className="icon-section">
             <h3>plate</h3>
-            <Segmented<PlateSizeKey> label="Size" value={plateSizeKey(draft)} onChange={(sz) => change((icon) => applyPlateSize(icon, sz))} options={PLATE_SIZES.map((s) => ({ value: s, label: s }))} />
+            <Segmented<PlateSizeKey> label="Size" readOnly={!!ro} value={plateSizeKey(draft)} onChange={(sz) => change((icon) => applyPlateSize(icon, sz))} options={PLATE_SIZES.map((s) => ({ value: s, label: s }))} />
           </section>
 
           <section className="icon-section">
@@ -575,15 +581,15 @@ export function IconView() {
                   <button type="button" className="icon-port-pick" onClick={() => setSelectedPort(port.id)} title="Place this connector with the pin tool">
                     {port.id}
                   </button>
-                  <SideSelect label={`${port.id} side`} value={port.side} onChange={(side) => change((icon) => setPortPlacement(icon, api.model.entries, port.id, side, port.at))} />
-                  <NumberField className="studio-look-at-input" aria-label={`${port.id} at`} value={port.at} onChange={(at) => change((icon) => setPortPlacement(icon, api.model.entries, port.id, port.side, at))} />
+                  <SideSelect label={`${port.id} side`} readOnly={ro} value={port.side} onChange={(side) => change((icon) => setPortPlacement(icon, api.model.entries, port.id, side, port.at))} />
+                  <NumberField className="studio-look-at-input" aria-label={`${port.id} at`} readOnly={!!ro} title={ro} value={port.at} onChange={(at) => change((icon) => setPortPlacement(icon, api.model.entries, port.id, port.side, at))} />
                 </div>
               ))
             )}
             <div className="icon-add-connector">
-              <input value={connName} placeholder="name" aria-label="New connector name" onChange={(e) => setConnName(e.target.value)} />
-              <input value={connClass} placeholder="class" aria-label="New connector class" onChange={(e) => setConnClass(e.target.value)} />
-              <Key size="sm" round icon="add" busy={connBusy} disabled={connBusy} label="Add the connector to the model, then place its pin" onClick={() => void addConnector()} />
+              <input className={ro ? "read-only" : undefined} readOnly={!!ro} title={ro} value={connName} placeholder="name" aria-label="New connector name" onChange={(e) => setConnName(e.target.value)} />
+              <input className={ro ? "read-only" : undefined} readOnly={!!ro} title={ro} value={connClass} placeholder="class" aria-label="New connector class" onChange={(e) => setConnClass(e.target.value)} />
+              <Key size="sm" round icon="add" busy={connBusy} disabled={connBusy || !!ro} title={ro} label="Add the connector to the model, then place its pin" onClick={() => void addConnector()} />
             </div>
           </section>
 

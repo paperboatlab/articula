@@ -18,6 +18,7 @@ function portsOf(model: ReturnType<typeof useStudio>["model"]): IconPort[] {
 
 export function PaperboatBlock() {
   const api = useStudio();
+  const ro = api.readOnly; // an example: the pins show, they don't move
   const [ports, setPorts] = useState<IconPort[]>(() => portsOf(api.model));
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -61,8 +62,8 @@ export function PaperboatBlock() {
               <div key={port.id} className="paperboat-block-port">
                 <span className="paperboat-block-name">{port.id}</span>
                 <span className="var-tag">{entry?.kind ?? "pin"}</span>
-                <SideSelect label={`${port.id} side`} value={port.side} onChange={(side) => update(port.id, side, port.at)} />
-                <NumberField className="studio-look-at-input" aria-label={`${port.id} at`} value={port.at} onChange={(at) => update(port.id, port.side, at)} />
+                <SideSelect label={`${port.id} side`} readOnly={ro} value={port.side} onChange={(side) => update(port.id, side, port.at)} />
+                <NumberField className="studio-look-at-input" aria-label={`${port.id} at`} readOnly={!!ro} title={ro} value={port.at} onChange={(at) => update(port.id, port.side, at)} />
               </div>
             );
           })

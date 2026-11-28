@@ -40,7 +40,8 @@ class Omc {
   struct Options {
     std::string runtime = "omc@1.27";                 // the paperboatd runtime
     std::filesystem::path project = {};               // the workspace: mounted for omc, writable
-    bool writable_project = true;                     // false: read-only (an example opened in place)
+    bool writable_project = true;                     // false: read-only, an example opened in place: the lease
+                                                      // asks for `readonly` (paperboat#91), enforced by paperboatd
     std::chrono::milliseconds timeout{30'000};        // per request
     int max_restarts = 3;                             // in a row, then failed
   };
@@ -57,7 +58,8 @@ class Omc {
   void shutdown();
   /** Work in another folder (empty: none): the session ends, and the next call starts one on the new
       project, loading again the libraries the old one had (not its files: they aren't in the new one).
-      `writable` false mounts it read-only (an example, paperboat#75): omc writes only its work folder. */
+      `writable` false leases it `readonly` (an example, paperboat#91): paperboatd keeps omc, and what it runs,
+      from writing into it on every backend (`:ro` in a container, Landlock natively); omc writes its work folder. */
   void set_project(const std::filesystem::path& project, bool writable = true);
   /** End the call in flight (a long simulate): it fails with "cancelled", and the next call
       starts a new session. Safe from any thread. */

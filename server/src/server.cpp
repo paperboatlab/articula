@@ -247,10 +247,12 @@ std::string user_model(const json& in) {
   return model;
 }
 
-// ── Examples are read-only (paperboat#75): one opened in place is run as it is, never changed; its Copy is
-// the user's to change. Where they are is the platform's word (`paperboat example list --json`, every app's,
-// and GitHub's cached copy under $PAPERBOAT_HOME/cache/examples), not the page's URL, so a write is refused
-// here whichever way it came: an op, an export, an open that would make a file.
+// ── Examples are read-only (paperboat#75, #91): one opened in place is run as it is, never changed; its Copy is
+// the user's to change. Which folders are examples is the platform's word, not the page's URL: the server
+// `paperboat example open` started has PAPERBOAT_EXAMPLE=<id> (its folder is that example), and every entry of
+// `paperboat example list --json` names the `root` the examples are in, so a folder opened later (Open folder)
+// is one when it lies in a root. A write is refused here whichever way it came (an op, an export, an open that
+// would make a file), and omc's lease is `readonly`, so paperboatd refuses what a model's code writes there.
 
 std::string paperboat_output(const std::string& args);
 fs::path paperboat_home();
@@ -272,24 +274,45 @@ bool at_or_inside(const fs::path& path, const fs::path& root) {
   return !rel.empty() && *rel.begin() != "..";  // "." is the root itself
 }
 
-std::mutex examples_mutex;
-std::optional<std::vector<ExampleAt>> examples_known;
+// GitHub's cached copy of the examples: the banner says so (and an older paperboat's examples are there).
+fs::path examples_cache() { return paperboat_home() / "cache" / "examples"; }
 
-// The examples' folders, read once and again when the workspace switches (`refresh`).
-std::vector<ExampleAt> example_folders(bool refresh = false) {
+// The example this server was started on (PAPERBOAT_EXAMPLE, paperboat#91): its id and the folder it opened.
+std::optional<ExampleAt> launched_example;
+
+struct Examples {
+  std::vector<ExampleAt> listed;  // `example list --json`'s, each at its own folder
+  std::vector<fs::path> roots;    // the folders they are in; every folder in one is an example's
+};
+std::mutex examples_mutex;
+std::optional<Examples> examples_known;
+
+// The examples, read once and again when the workspace switches (`refresh`).
+Examples example_folders(bool refresh = false) {
   std::lock_guard lock(examples_mutex);
   if (examples_known && !refresh) return *examples_known;
-  std::vector<ExampleAt> out;
+  Examples out;
+  bool rooted = false;  // paperboat 0.2.0-beta.9 and later name each one's root
   try {
     const json list = json::parse(paperboat_output("example list --json"));
     if (list.is_array())
-      for (const json& x : list)
-        if (x.is_object() && x.contains("path") && x["path"].is_string() && !x["path"].get<std::string>().empty())
-          out.push_back({real_path(x["path"].get<std::string>()), x.value("id", ""), x.value("name", x.value("id", ""))});
+      for (const json& x : list) {
+        if (!x.is_object()) continue;
+        if (x.contains("path") && x["path"].is_string() && !x["path"].get<std::string>().empty())
+          out.listed.push_back({real_path(x["path"].get<std::string>()), x.value("id", ""), x.value("name", x.value("id", ""))});
+        if (x.contains("root") && x["root"].is_string() && !x["root"].get<std::string>().empty()) {
+          rooted = true;
+          const fs::path root = real_path(x["root"].get<std::string>());
+          if (std::ranges::find(out.roots, root) == out.roots.end()) out.roots.push_back(root);
+        }
+      }
   } catch (const json::exception&) {
-    // no paperboat: only the cache below
+    // no paperboat: only the fallback below
   }
-  out.push_back({real_path(paperboat_home() / "cache" / "examples"), "", ""});  // GitHub's copy, all of it
+  if (!rooted) {  // an older paperboat, or none: where it keeps them (its checkout, GitHub's copy)
+    if (const char* dir = std::getenv("PAPERBOAT_EXAMPLES_DIR"); dir && *dir) out.roots.push_back(real_path(dir));
+    out.roots.push_back(real_path(examples_cache()));
+  }
   examples_known = out;
   return out;
 }
@@ -298,9 +321,24 @@ std::vector<ExampleAt> example_folders(bool refresh = false) {
 std::optional<ExampleAt> example_at(const fs::path& path) {
   if (path.empty()) return std::nullopt;
   const fs::path p = real_path(path);
-  for (const ExampleAt& x : example_folders())
+  if (launched_example && at_or_inside(p, launched_example->root)) return launched_example;
+  const Examples known = example_folders();
+  for (const ExampleAt& x : known.listed)
     if (at_or_inside(p, x.root)) return x;
+  for (const fs::path& root : known.roots)
+    if (at_or_inside(p, root)) return ExampleAt{p, "", ""};  // in a root, though no example's own folder: no id, no Copy
   return std::nullopt;
+}
+
+// PAPERBOAT_EXAMPLE (paperboat#91): `example open <id>` started this server on `folder`, that example.
+void launched_on(const fs::path& folder) {
+  launched_example.reset();
+  const char* id = std::getenv("PAPERBOAT_EXAMPLE");
+  if (!id || !*id || folder.empty()) return;
+  ExampleAt x{real_path(folder), id, ""};
+  for (const ExampleAt& l : example_folders().listed)
+    if (l.id == x.id) x.name = l.name;  // its name as the list has it, else its folder's
+  launched_example = x;
 }
 
 std::string example_words(const ExampleAt& x) {
@@ -1743,6 +1781,18 @@ Place current_place() {
   return place;
 }
 
+// A write into an example that paperboatd refused (omc's lease is read-only, paperboat#91): omc and a model's code
+// say only "Permission denied" (Landlock) or "Read-only file system" (a container's `:ro`); add what paperboat's
+// Julia and Python runtimes say of one.
+std::string readonly_hint(const std::string& error, const Place& p, const std::string& work) {
+  if (!p.example || error.find("is read-only: it is an example") != std::string::npos) return error;
+  if (error.find("Permission denied") == std::string::npos && error.find("Read-only file system") == std::string::npos) return error;
+  const std::string root = p.root.string(), real = real_path(p.root).string();
+  if (error.find(root) == std::string::npos && error.find(real) == std::string::npos) return error;
+  return error + " (the project " + root + " is read-only: it is an example; copy it to change it, or write under the working directory, " +
+         work + ")";
+}
+
 // Where an example's exports go, as nothing is written into it: Articula's own folder, exports/<its folder>.
 fs::path example_exports(const Place& p) { return default_workspace() / "exports" / p.root.filename(); }
 
@@ -1751,7 +1801,7 @@ json place_json(const Place& p) {
   json out{{"kind", p.kind}, {"root", p.root.string()}, {"name", p.name}};
   if (!p.hub.empty()) out["hub"] = p.hub;
   if (p.example) out["example"] = {{"id", p.example->id}, {"name", p.example->name.empty() ? p.name : p.example->name}, {"exports", example_exports(p).string()},
-                     {"cache", at_or_inside(real_path(p.root), real_path(paperboat_home() / "cache" / "examples"))}};  // GitHub's copy
+                     {"cache", at_or_inside(real_path(p.root), real_path(examples_cache()))}};  // GitHub's copy
   return out;
 }
 
@@ -2363,7 +2413,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
     out["ok"] = true;
   } catch (const std::exception& e) {
     out["ok"] = false;
-    out["error"] = e.what();
+    out["error"] = readonly_hint(e.what(), current_place(), omc.workdir());
   }
   // Drain once per operation so the Console hears omc, and a later getErrorString can read it.
   // If an op already read the messages (errors() or its own drain), keep that read. The ops that only
@@ -2388,6 +2438,8 @@ fs::path default_workspace() {
   if (!home || !*home) home = std::getenv("USERPROFILE");
   return fs::path(home && *home ? home : ".") / "Documents" / "paperboat" / "articula";
 }
+
+void note_launched_example(const fs::path& folder) { launched_on(folder); }
 
 fs::path workspace_of(const fs::path& file) {
   fs::path root = fs::is_directory(file) ? file : file.parent_path();
@@ -2417,6 +2469,7 @@ int serve_articula(int port, const fs::path& app, Omc::Options options, const fs
   sigaction(SIGINT, &sa, nullptr);
 #endif
   Omc omc(std::move(options));
+  if (!given.empty()) note_launched_example(workspace_of(file.empty() ? user_path(given.string()) : file));
   if (!file.empty()) work_in(omc, place_of_file(file));
   else if (!given.empty()) op_open_folder(omc, {{"path", given.string()}});
   // port 0: Articula's home port 30472, else the first free one of 30500..30599 (further folders)

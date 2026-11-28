@@ -88,14 +88,19 @@ flowchart LR
   (the `hubs` op is null, and no hub word shows). Inside a hub no Git shows.
 - One workspace per server, which omc's lease follows: a file opens in this window, switching the
   workspace to its folder or hub when it lies outside (never a second window); closing goes back to Start.
-- An example opened in place is read-only (paperboat#75). The server knows one from `paperboat example list
-  --json` (every app's, where they are) and `$PAPERBOAT_HOME/cache/examples`, not from the page's URL: every
-  op that writes a file refuses a path in one (save, Save as, new/duplicate/rename/delete/move class, new/delete
-  package, a dropped or new `.mo`, `generate`'s out, an export, Copy into it), the canvas's edit calls are refused
-  while the workspace is one, omc's lease gets it read-only (no `writable_project`), it stays out of
-  `recent.json`, and a hub inside one is no hub (`hubs` leaves it out). Running it writes only omc's work
-  folder; an export goes to `default_workspace()/exports/<its folder>`. The page reads `workspace`'s `example`
-  ({id, name, exports, cache}): the banner, the store refusing every edit with its words, the editor
-  read-only (but focusable, so Vim's and Helix's `:w` reaches Save and says why not), the canvas locked, the rail without New/Rename/Delete/drag.
+- An example opened in place is read-only (paperboat#75, #91). The server knows one from the platform, not from
+  the page's URL: the folder it was started on when `paperboat example open` gave it `PAPERBOAT_EXAMPLE=<id>`, and
+  any folder in a `root` of `paperboat example list --json` (an older paperboat, without `root`: its examples'
+  folders, `$PAPERBOAT_EXAMPLES_DIR` and `$PAPERBOAT_HOME/cache/examples`). Every op that writes a file refuses a
+  path in one (save, Save as, new/duplicate/rename/delete/move class, new/delete package, a dropped or new `.mo`,
+  `generate`'s out, an export, Copy into it), the canvas's edit calls are refused while the workspace is one, it
+  stays out of `recent.json`, and a hub inside one is no hub (`hubs` leaves it out). omc's leases (the session and
+  a libraries script) ask for `"readonly": true`, so paperboatd holds omc, and the simulators it builds, to it on
+  every backend (`:ro` in a container, Landlock natively): a model whose code writes into the example by absolute
+  path fails, and the server adds the runtimes' words (`… is read-only: it is an example; copy it …`) to the
+  "Permission denied" it reports. Running it writes only omc's work folder; an export goes to
+  `default_workspace()/exports/<its folder>`. The page reads `workspace`'s `example` ({id, name, exports, cache}),
+  so a window opened without `?example=` has it too: the banner and Copy, the store refusing every edit with its
+  words, the editor read-only, the canvas locked, the rail without New/Rename/Delete/drag.
 - The shared store is every app's: Articula writes only its own entries into `recent.json` (newest first,
   one per kind and path, 40 at most) and only `theme` in `settings.json`, keeping the keys it doesn't know.

@@ -1359,6 +1359,56 @@ TEST_CASE("an example opened in place is read-only: every write is refused, a ru
   unsetenv("ARTICULA_WORKSPACE");
 }
 
+TEST_CASE("PAPERBOAT_EXAMPLE: the folder the server was started on is that example, listed or not (paperboat#91)", "[articula]") {
+  const Store store;
+  mo::Omc omc;  // never started
+  // a folder no list names: `example open` told the server it is modelica/01-decay
+  const fs::path folder = store.home.parent_path() / "opened-here";
+  fs::create_directories(folder);
+  setenv("PAPERBOAT_EXAMPLE", "modelica/01-decay", 1);
+  mo::note_launched_example(folder);
+  const json opened = op(omc, {{"op", "open_folder"}, {"path", folder.string()}})["result"];
+  CHECK(opened["example"]["id"] == "modelica/01-decay");
+  CHECK(opened["example"]["name"] == "01 Decay");  // the list's name for that id
+  const json r = op(omc, {{"op", "create_class"}, {"file", (folder / "New.mo").string()}, {"name", "New"}, {"within", ""}});
+  CHECK(r["ok"] == false);
+  CHECK_THAT(r.value("error", ""), Catch::Matchers::ContainsSubstring("01 Decay is an example"));
+  CHECK_FALSE(fs::exists(folder / "New.mo"));
+  CHECK_FALSE(fs::exists(store.home / "recent.json"));
+  // without it (a plain folder, or a copy `example copy --open` started): no example
+  unsetenv("PAPERBOAT_EXAMPLE");
+  mo::note_launched_example(folder);
+  CHECK_FALSE(op(omc, {{"op", "open_folder"}, {"path", folder.string()}})["result"].contains("example"));
+  CHECK(op(omc, {{"op", "create_class"}, {"file", (folder / "New.mo").string()}, {"name", "New"}, {"within", ""}})["ok"] == true);
+}
+
+TEST_CASE("example list's root: every folder in one is an example; the old markers only for a paperboat without it (paperboat#91)", "[articula]") {
+  const Store store;
+  mo::Omc omc;
+  const fs::path base = store.home.parent_path(), root = base / "checkout", listed = root / "modelica" / "01-decay";
+  const fs::path unlisted = root / "modelica" / "02-new", cached = store.home / "cache" / "examples" / "modelica" / "01-decay";
+  const fs::path dir = base / "examples-dir" / "modelica" / "01-decay";
+  for (const auto& d : {listed, unlisted, cached, dir}) fs::create_directories(d);
+  const fs::path bin = base / "paperboat-rooted";
+  std::ofstream(bin) << "#!/bin/sh\n[ \"$*\" = \"example list --json\" ] && echo '[{\"id\": \"modelica/01-decay\", \"app\": \"articula\", \"name\": \"01 Decay\", \"path\": \""
+                     << listed.string() << "\", \"root\": \"" << root.string() << "\"}]'\n";
+  fs::permissions(bin, fs::perms::owner_all);
+  setenv("PAPERBOAT_BIN", bin.c_str(), 1);
+  setenv("PAPERBOAT_EXAMPLES_DIR", (base / "examples-dir").c_str(), 1);
+  const auto example_of = [&](const fs::path& p) { return op(omc, {{"op", "open_folder"}, {"path", p.string()}})["result"].value("example", json()); };
+  CHECK(example_of(listed)["id"] == "modelica/01-decay");
+  CHECK(example_of(unlisted)["id"] == "");  // in the root, though no list names it: read-only, without a Copy
+  CHECK(op(omc, {{"op", "create_class"}, {"file", (unlisted / "New.mo").string()}, {"name", "New"}, {"within", ""}})["ok"] == false);
+  CHECK(example_of(cached).is_null());  // paperboat named the roots: its cache and $PAPERBOAT_EXAMPLES_DIR are no guess of Articula's
+  CHECK(example_of(dir).is_null());
+  // an older paperboat (no root): where it keeps them, as before
+  setenv("PAPERBOAT_BIN", (base / "paperboat").c_str(), 1);
+  CHECK(example_of(cached)["cache"] == true);
+  CHECK(!example_of(dir).is_null());
+  CHECK(example_of(unlisted).is_null());
+  unsetenv("PAPERBOAT_EXAMPLES_DIR");
+}
+
 TEST_CASE("running an example in place (check, flatten, generate, simulate, export) writes nothing into it (paperboat#75)", "[articula][omc]") {
   if (!have_omc()) SKIP("omc not installed");
   const Store store;

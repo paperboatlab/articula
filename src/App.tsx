@@ -8,10 +8,11 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { About, AppMark, Icon, Key, MenuBar, Notifications, Panel, PanelsKey, RuntimesKey, Search, Segmented, ScaleSetting, SettingRow, Settings, SettingsSection, ShortcutList, Split as Gutter, ThemeSetting, Toasts, WindowKeys, isScale, readStored, useScale, useToasts, writeStored, type PaneRect, type Scale, type SearchItem, type Theme } from "@paperboatlab/ui";
 import { HelpWindow } from "@paperboatlab/ui";
 import { afterClose, EditorSettingsPane, EditorTabs, orderTabs, tabMenu } from "@paperboatlab/ui/editor";
-import { ExampleBanner, exampleCommands, exampleFromUrl, helpCommand, SEARCH_CHORD, transferMenu, useShortcuts, type Command, type Example, type TransferMode } from "@paperboatlab/ui";
+import { ExampleBanner, chordMatches, exampleCommands, exampleFromUrl, helpCommand, isEnabled, SEARCH_CHORD, transferMenu, useShortcuts, type Command, type Example, type TransferMode } from "@paperboatlab/ui";
 import { ArticulaTransfer, exportKinds, importKinds, type Run as TransferRun } from "./transfer/Transfer.tsx";
 import { omHelp } from "./shell/help.ts";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import type { KeyBinding } from "@codemirror/view";
 import { ConnectHub, OpenFile, SaveFile, type Hub } from "@paperboatlab/ui/hub";
 import { AskOpen, baseName, fileMenu, parseRecent, parseSettings, recentFor, recentMenu, shell, Start, tilde, TypedPath, Unsaved, useOpening, when, WorkspaceWell, type Opening as OpeningState, type RecentEntry, type Workspace as Place } from "@paperboatlab/ui/workspace";
 import type { FileEntry } from "@paperboatlab/ui/files";
@@ -900,6 +901,14 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   // an example's window: nothing that would write into it runs (Save as still goes elsewhere: a copy the user keeps)
   if (readOnly) for (const c of commands) if (WRITES.has(c.id)) Object.assign(c, { enabled: false, why: readOnly });
   useShortcuts(commands);
+  // Articula's shortcuts in the Text view's editor go ahead of Vim's or Helix's mode (Ctrl B is Vim's page up, Ctrl R
+  // its redo): the editor claims the key, so the mode leaves it, and the window's useShortcuts runs the command as
+  // it does everywhere else. Only keys that aren't text (with Ctrl or Alt, or F1…), and only while the command runs.
+  const commandsRef = useRef(commands);
+  commandsRef.current = commands;
+  const textKeys = useMemo<KeyBinding[]>(() => [{
+    any: (_view, e) => commandsRef.current.some((c) => c.chord && (c.chord.ctrl || c.chord.alt || /^f\d+$/.test(c.chord.key)) && chordMatches(c.chord, e) && isEnabled(c)),
+  }], []);
   const helpProvider = useMemo(() => omHelp(omc), [omc]);
 
   const searchItems = useMemo<SearchItem[]>(() => [
@@ -1005,6 +1014,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                     <TextStage
                       model={model}
                       readOnly={readOnly}
+                      keys={textKeys}
+                      onRefused={(why) => show({ title: "Not saved: the example is read-only", detail: why, state: "failed" })}
                       actions={actions}
                       line={sourceLine}
                       theme={shown}

@@ -10,8 +10,10 @@ the left. A change applies at once; there is no Save.
   Theme picks the theme too.
 - **Articula**: OpenModelica (omc's version and how it runs; **Libraries…**, the workspace's Modelica
   libraries), Simulation (**Solver settings…**, kept per model) and Export (**Export station…**).
-- **Editor**: the text editor's look (theme, font, size, line height) and typing (tab size, wrap lines,
-  autocomplete, close brackets, lint). They live in the user config file ``articula.toml``:
+- **Editor**: the text editor's look (theme, font, size, line height), typing (tab size, wrap lines,
+  autocomplete, close brackets, lint) and **Keys**: Standard, Vim or Helix. In Vim and Helix, ``:w`` saves
+  the model's ``.mo`` (in an example it says the example is read-only), and Articula's own shortcuts
+  (:kbd:`Ctrl B`, :kbd:`Ctrl R`, :kbd:`Ctrl K`…) still go first. They live in the user config file ``articula.toml``:
   ``~/.config/paperboat/`` (``$XDG_CONFIG_HOME``) on Linux and macOS, ``%APPDATA%\paperboat\`` on
   Windows. The first run writes it with every key commented.
 - **Hub**, while Articula works in a hub: its name and folder, **Switch hub…** and **Close hub**. The

@@ -64,7 +64,8 @@ flowchart LR
   (File › Settings… Ctrl ,; Help › Keyboard shortcuts Ctrl / opens it on Shortcuts): General (the theme,
   `settings.json`'s), Articula (omc, libraries, solver, export), Editor (`EditorSettingsPane`, `articula.toml`),
   Hub (in a hub), Shortcuts (`ShortcutList` over the command registry);
-  `src/shell/`: the cards and dialogs (`Rail` Files/Library, `StudioConsole`, `Opening` the kit's Splash over the steps an open waits on (the `open` op's progress: omc, library, file; then reading),
+  `src/shell/`: the cards and dialogs (`Rail` Files/Library, `TextStage` the Text view, whose editor's keys are
+  Save's `Mod-s`, what Vim's and Helix's `:w` runs, and the command registry's chords, ahead of the mode, `StudioConsole`, `Opening` the kit's Splash over the steps an open waits on (the `open` op's progress: omc, library, file; then reading),
   `menus.ts`).
 - `src/store/`: `useStudioStore`, the `StudioApi` the views share (omc is the only source of truth: an
   edit is omc calls, then the model is read again); `src/omc/omc.ts` the `articula/0` client.
@@ -95,6 +96,6 @@ flowchart LR
   `recent.json`, and a hub inside one is no hub (`hubs` leaves it out). Running it writes only omc's work
   folder; an export goes to `default_workspace()/exports/<its folder>`. The page reads `workspace`'s `example`
   ({id, name, exports, cache}): the banner, the store refusing every edit with its words, the editor
-  read-only, the canvas locked, the rail without New/Rename/Delete/drag.
+  read-only (but focusable, so Vim's and Helix's `:w` reaches Save and says why not), the canvas locked, the rail without New/Rename/Delete/drag.
 - The shared store is every app's: Articula writes only its own entries into `recent.json` (newest first,
   one per kind and path, 40 at most) and only `theme` in `settings.json`, keeping the keys it doesn't know.

@@ -19,8 +19,8 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run build   # before the tests: keys.test.ts drives the built page (it skips without omc here)
       - run: npm test
-      - run: npm run build
 
   server:
     # omc comes from paperboatd (the omc runtime); without it the [omc] tests skip and the rest run.

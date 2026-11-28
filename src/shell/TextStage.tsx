@@ -1,12 +1,12 @@
 // The stage's Text view: the model's whole .mo, editable. It reads the file (not omc's list(),
 // which is the class body) so `within` and annotations are exactly what Save writes back.
-// It is the shared Studio editor (@paperboat/shared/editor) with Modelica, always editable. A
+// It is the shared Studio editor (@paperboat/shared/editor) with Modelica, editable but in an example. A
 // message selects its line. The App routes Save and document switches through the
-// registered handle.
+// registered handle. Its keys: Save (Mod-s, which Vim's and Helix's `:w` runs) and the App's, ahead of the mode.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorSelection } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { EditorView, type KeyBinding } from "@codemirror/view";
 import { Key } from "@paperboatlab/ui";
 import { Editor as CodeEditor, type EditorSettings } from "@paperboatlab/ui/editor";
 import { modelica } from "@paperboatlab/ui/editor";
@@ -14,6 +14,11 @@ import type { StudioModel } from "../model/types.ts";
 import type { Actions } from "../store/index.tsx";
 
 export type TextEditorHandle = { dirty: boolean; save: () => Promise<void> };
+
+// The kit makes a read-only editor unfocusable; an example's takes the focus while its state stays read-only, so
+// Vim's and Helix's keys move about it and `:w` reaches Save, which says why not (the kit's Editor puts `extra`
+// ahead of its read-only: the first editable value wins).
+const FOCUSABLE = EditorView.editable.of(true);
 
 export function TextStage({
   model,
@@ -23,6 +28,8 @@ export function TextStage({
   settings,
   base,
   readOnly,
+  keys,
+  onRefused,
   onEditor,
 }: {
   model: StudioModel;
@@ -36,6 +43,10 @@ export function TextStage({
   base?: string | null;
   /** An example opened in place: why the text takes no edit (it reads, selects and copies). */
   readOnly?: string;
+  /** The App's keys, ahead of Vim's or Helix's mode; read at mount. */
+  keys?: readonly KeyBinding[];
+  /** Save in an example (Ctrl S, `:w`): told why it doesn't save. */
+  onRefused?: (why: string) => void;
   onEditor?: (handle: TextEditorHandle | null) => void;
 }) {
   const [text, setText] = useState<string | null>(null);
@@ -49,6 +60,8 @@ export function TextStage({
   write.current = actions.saveText;
   const editorCb = useRef(onEditor);
   editorCb.current = onEditor;
+  const refused = useRef(onRefused);
+  refused.current = onRefused;
 
   useEffect(() => {
     let live = true;
@@ -69,7 +82,8 @@ export function TextStage({
 
   const dirty = text !== null && text !== saved;
   const save = useCallback(async () => {
-    if (text === null || text === saved || busy || readOnly) return;
+    if (readOnly) return void refused.current?.(readOnly);
+    if (text === null || text === saved || busy) return;
     setBusy(true);
     setError("");
     try {
@@ -107,6 +121,12 @@ export function TextStage({
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
+  // Mod-s is what Vim's and Helix's `:w` runs (Ctrl S itself is the window's, above)
+  const editorKeys = useMemo<KeyBinding[]>(() => [
+    { key: "Mod-s", preventDefault: true, run: () => (void saveRef.current(), true) },
+    ...(keys ?? []),
+  ], [keys]);
+
   // A message's line: select it and bring it to the middle.
   useEffect(() => {
     if (!view || !line) return;
@@ -139,6 +159,8 @@ export function TextStage({
             value={text}
             onChange={setText}
             readOnly={!!readOnly}
+            keys={editorKeys}
+            extra={readOnly ? FOCUSABLE : undefined}
             settings={settings}
             appTheme={theme}
             ariaLabel="Modelica source editor"

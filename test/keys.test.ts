@@ -27,7 +27,7 @@ const skip = process.platform !== "linux" ? "Linux only"
 
 const MODEL = "model Tank\n  Real h(start = 1);\nequation\n  der(h) = -h;\nend Tank;\n";
 
-test("Vim and Helix in the Text view: i inserts, :w saves the .mo, Articula's keys go first, an example says it is read-only", { skip, timeout: 180_000 }, async () => {
+test("Vim and Helix in the Text view: i inserts, :w saves the .mo, Articula's keys go first, an example says it is read-only (its banner without ?example= too)", { skip, timeout: 180_000 }, async () => {
   const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "articula-keys-")));
   const work = path.join(tmp, "work"), conf = path.join(tmp, "config");
   fs.mkdirSync(work);
@@ -41,9 +41,9 @@ test("Vim and Helix in the Text view: i inserts, :w saves the .mo, Articula's ke
   const env = { ...process.env, XDG_CONFIG_HOME: conf, PAPERBOAT_EXAMPLES_DIR: path.join(tmp, "examples"), ARTICULA_WORKSPACE: path.join(tmp, "articula") };
 
   const servers: ChildProcess[] = [];
-  const start = async (target: string) => {
+  const start = async (target: string, more: Record<string, string> = {}) => {
     const port = 30700 + Math.floor(Math.random() * 90);
-    const server = spawn(serverBin, [target, "--port", String(port), "--app", path.join(root, "dist")], { env, stdio: ["ignore", "pipe", "inherit"] });
+    const server = spawn(serverBin, [target, "--port", String(port), "--app", path.join(root, "dist")], { env: { ...env, ...more }, stdio: ["ignore", "pipe", "inherit"] });
     servers.push(server);
     await new Promise<void>((ok, no) => {
       server.stdout!.on("data", (d: Buffer) => d.toString().includes("articula/0") && ok());
@@ -124,6 +124,21 @@ test("Vim and Helix in the Text view: i inserts, :w saves the .mo, Articula's ke
     await three.keyboard.press("Enter");
     await three.getByText("Not saved: the example is read-only").waitFor({ timeout: 5000 });
     assert.equal(fs.readFileSync(path.join(ex, "Tank.mo"), "utf8"), MODEL);
+
+    // started as `paperboat example open` starts it (PAPERBOAT_EXAMPLE, paperboat#91) on a folder no marker names,
+    // in a window without ?example=: the banner and its Copy show all the same, and `:w` doesn't save
+    const elsewhere = path.join(tmp, "opened-here");
+    fs.mkdirSync(elsewhere);
+    fs.writeFileSync(path.join(elsewhere, "Tank.mo"), MODEL);
+    const four = await open(await start(path.join(elsewhere, "Tank.mo"), { PAPERBOAT_EXAMPLE: "modelica/tank" }));
+    assert.equal(new URL(four.url()).search, "");
+    await four.getByRole("note", { name: "Tank: an example" }).waitFor({ timeout: 10_000 });
+    await four.getByRole("button", { name: /Copy to a folder/ }).waitFor();
+    await first(four).click();
+    await four.keyboard.type(":w");
+    await four.keyboard.press("Enter");
+    await four.getByText("Not saved: the example is read-only").waitFor({ timeout: 5000 });
+    assert.equal(fs.readFileSync(path.join(elsewhere, "Tank.mo"), "utf8"), MODEL);
   } finally {
     await browser?.close();
     for (const s of servers) s.kill();

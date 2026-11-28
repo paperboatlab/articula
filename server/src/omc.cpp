@@ -262,7 +262,11 @@ struct Omc::Impl {
     if (shutting_down) throw OmcError("omc is shutting down");
     control = open_control();
     json args = {{"runtime", options.runtime}, {"mode", "session"}, {"owner", "articula:" + options.project.string()}};
-    if (!options.project.empty()) args["project"] = fs::absolute(options.project).string(), args["policy"] = {{"writable_project", options.writable_project}};
+    if (!options.project.empty()) {
+      args["project"] = fs::absolute(options.project).string(), args["policy"] = {{"writable_project", options.writable_project}};
+      // an example (paperboat#91): paperboatd keeps it read-only on every backend (`:ro`, Landlock natively)
+      if (!options.writable_project) args["readonly"] = true;
+    }
     lease = control_call("acquire", args);
     backend = lease.value("backend", "");
     workdir = lease.value("work", "");
@@ -477,7 +481,10 @@ std::pair<int, std::string> Omc::script(const std::string& mos, bool network, st
     std::string body = "cat > /tmp/articula.mos <<'ARTICULA_MOS'\n" + impl_->to_omc(mos) + "\nARTICULA_MOS\nexec omc /tmp/articula.mos";
     json args = {{"runtime", impl_->options.runtime}, {"mode", "exec"}, {"owner", "articula:" + impl_->options.project.string() + ":libraries"},
                  {"command", {"sh", "-c", body}}};
-    if (!impl_->options.project.empty()) args["project"] = fs::absolute(impl_->options.project).string();
+    if (!impl_->options.project.empty()) {
+      args["project"] = fs::absolute(impl_->options.project).string();
+      if (!impl_->options.writable_project) args["readonly"] = true;  // an example's, as the session's (paperboat#91)
+    }
     if (network) args["policy"] = {{"network", true}};
     const json lease = impl_->control_call(fd, "acquire", args);
     const std::string id = lease.value("id", "");

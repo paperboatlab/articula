@@ -20,7 +20,9 @@
 //                                                  was started on while its workspace is open, else {file: null}
 //   workspace {}                                → {kind: "folder"|"hub"|null, root, name, hub?, example?}  what it works in;
 //                                                  `example` {id, name, exports, cache} when it is one, read-only
-//                                                  (paperboat#75): every write under an example is refused
+//                                                  (paperboat#75): every write under an example is refused. One is the
+//                                                  folder the server started on with PAPERBOAT_EXAMPLE, or any folder in
+//                                                  a `root` of `paperboat example list --json` (paperboat#91)
 //   open_folder {path}                          → workspace          Open folder… (~ allowed); a hub's folder opens the hub
 //   connect   {hub}                             → workspace          Connect to a hub… (an id from `hubs`)
 //   close_workspace {}                          → {kind: null}       Close folder, Close hub: the Start page
@@ -105,6 +107,10 @@ nlohmann::json visual_shapes(const std::string& xml, const std::function<nlohman
 // The workspace omc sees for `file` (a folder or a .mo): its folder, or the folder holding its top
 // package. Mounted as the omc lease's project.
 std::filesystem::path workspace_of(const std::filesystem::path& file);
+
+// The folder this server was started on, when PAPERBOAT_EXAMPLE=<id> is set (`paperboat example open`, paperboat#91):
+// that example, read-only, whether or not a list names it. Unset: none (serve_articula calls it).
+void note_launched_example(const std::filesystem::path& folder);
 
 // Articula's own folder, where New model goes without a workspace: $ARTICULA_WORKSPACE, else
 // ~/Documents/paperboat/articula.
